@@ -10,27 +10,85 @@ CLEANUP_INSTRUCTIONS = (
     'Reply with the cleaned transcript only.'
 )
 SUMMARY_INSTRUCTIONS = """
-Analyze the provided meeting transcript and generate a structured summary by following these steps:
+Analyze the provided meeting transcript (or combined section notes) and generate a comprehensive, structured meeting summary. Emphasize accuracy and completeness.
 
-1. Identify the core purpose of the meeting, major conclusions reached, and open discussions.
-2. Extract every explicit commitment, assignment, or follow-up item.
+Format your response EXACTLY using the Markdown structure below. Replace bracketed placeholders with extracted information. If an optional subsection under a Feature/Topic lacks information, omit that specific subsection. Do not invent details.
 
-Provide your response in EXACTLY this structure:
+# Meeting Notes
 
-SUMMARY
-[A brief paragraph summarizing the high-level purpose and outcomes of the conversation.]
-- [Key discussion point or decision 1]
-- [Key discussion point or decision 2]
-- [Key discussion point or decision 3]
-- [etc as needed]
+**Date:** [Extract date if mentioned, otherwise TBD]
+**Attendees:** [List all attendees present]
+**Project:** [Which project or app this pertains to]
 
-ACTION ITEMS
-- [Owner/Unassigned]: [Clear description of task]
-- [Owner/Unassigned]: [Clear description of task]
-- [etc as needed]
-(If no tasks exist, output strictly: "- None stated.")
+## People Mentioned
+[Key stakeholders, decision-makers, or people referenced during the meeting]
+
+## Overview
+[2-3 sentence summary: What was discussed, key outcomes, any decisions reached]
+
+---
+
+## Feature: [Feature or Topic Name]
+
+### Decisions
+| Decision | Details |
+|----------|---------|
+| [Decision 1] | [Details/Rationale] |
+
+### Technical Requirements
+| Requirement | Details |
+|-------------|---------|
+| [Requirement 1] | [Details/Constraints] |
+
+### Business Process Changes
+| Change | Details |
+|--------|---------|
+| [Process Change 1] | [Workflow updates] |
+
+### Important Actions
+- [Owner/Unassigned]: [Action] - due [Date/TBD]
+
+### Open Questions
+| Question | Details |
+|----------|---------|
+| [Question 1] | [Context/Details] |
+
+---
+[Repeat the Feature block above for additional features/topics as needed]
+---
+
+## Other
+[Include any other important information here, or write "None"]
+
+## Next Steps
+[What happens next, follow-up plans, or next meeting details]
 """
-SECTION_INSTRUCTIONS = (
-    'You are taking notes on one part of a longer meeting transcript. '
-    'Please provide the following: \n' + SUMMARY_INSTRUCTIONS
-)
+
+SECTION_INSTRUCTIONS = """
+You are a sub-agent taking notes on one specific section of a larger meeting transcript. 
+Your goal is to extract important information accurately and completely so the final summarizer can build a master document.
+
+Do NOT attempt to format this as the final document. Instead, extract all relevant details into the following categories. If a category has no data in this chunk, write "None".
+
+1. METADATA:
+- Date mentioned:
+- Attendees speaking or present:
+- Projects/Apps mentioned:
+- People mentioned:
+
+2. SECTION OVERVIEW:
+[1-2 sentences summarizing what was discussed in this specific chunk]
+
+3. FEATURES & TOPICS DISCUSSED:
+[For each feature or main topic discussed, extract:]
+- Feature/Topic Name:
+- Decisions Reached:
+- Technical Requirements/Constraints:
+- Business Process Changes:
+- Action Items (Include Owner and Due Date if stated):
+- Open Questions:
+
+4. OTHER & NEXT STEPS:
+- Other notes:
+- Next steps mentioned:
+"""

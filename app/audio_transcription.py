@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import random
 import re
@@ -20,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter, sleep
+from types import TracebackType
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -48,21 +50,37 @@ POLISH_RETRY_BACKOFF_SECONDS = 2.0
 POLISH_TIMEOUT_SECONDS = 180.0
 POLISH_WORKERS_MAX = 4
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+SEGMENT_LENGTH_SECONDS = 30
+SUMMARY_INSTRUCTIONS = """
+Analyze the provided meeting transcript and generate a structured summary by following these steps:
+
+1. Identify the core purpose of the meeting, major conclusions reached, and open discussions.
+2. Extract every explicit commitment, assignment, or follow-up item.
+
+Provide your response in EXACTLY this structure:
+
+SUMMARY
+[A brief paragraph summarizing the high-level purpose and outcomes of the conversation.]
+- [Key discussion point or decision 1]
+- [Key discussion point or decision 2]
+- [Key discussion point or decision 3]
+- [etc as needed]
+
+ACTION ITEMS
+- [Owner/Unassigned]: [Clear description of task]
+- [Owner/Unassigned]: [Clear description of task]
+- [etc as needed]
+(If no tasks exist, output strictly: "- None stated.")
+"""
+
 SECTION_INSTRUCTIONS = (
     'You are taking notes on one part of a longer meeting transcript. '
-    'Reply with up to six "- " bullet points covering what was decided, discussed and assigned. '
-    'Name the speaker or the owner when the transcript names one. '
-    'Reply with the bullet points only.'
-)
-SEGMENT_LENGTH_SECONDS = 30
-SUMMARY_INSTRUCTIONS = (
-    'You are writing meeting notes from a transcript. '
-    'Reply with exactly these two sections and nothing else. '
-    'First a line reading SUMMARY, then a short paragraph, then up to eight "- " bullet points. '
-    'Then a line reading ACTION ITEMS, then one "- " bullet per task, naming the owner when the '
-    'transcript names one, or a single bullet reading "- None stated." when there are no tasks.'
+    'Please provide the following: \n' + SUMMARY_INSTRUCTIONS
+
 )
 SUPPORTED_AUDIO_EXTENSIONS = ('mp3', 'wav', 'flac', 'mp4', 'mpeg', 'ogg', 'm4a', 'webm')
+LOG_PATH = SCRIPT_DIRECTORY.parent / 'mimir.log'
+log = logging.getLogger('mimir')
 
 
 class TranscriptionError(Exception):
@@ -154,6 +172,9 @@ class Console:
                 f'    {self.WARN}{gap_count} audio {piece_label} missing across '
                 f'{gap_file_count} {file_label}; search transcripts for [inaudible]{self.RESET}'
             )
+
+        if fail_count or gap_count:
+            print(f'    {self.MUTED}details: {LOG_PATH}{self.RESET}')
 
     def warning(self, message: str) -> None:
         print(f'   {self.WARN}{message}{self.RESET}')
@@ -260,10 +281,14 @@ class AudioChunker:
 
         except subprocess.CalledProcessError as error:
             temp_directory.rmdir()
-            detail = error.stderr.strip().splitlines()[-1] if error.stderr and error.stderr.strip() else ''
-            message = f'ffmpeg could not read this file. {detail}'.strip()
+            stderr_text = error.stderr.strip() if error.stderr else ''
 
-            raise TranscriptionError(message)
+            if stderr_text:
+                log.error('ffmpeg stderr  file=%s\n%s', audio_file.name, stderr_text)
+
+            detail = stderr_text.splitlines()[-1] if stderr_text else ''
+            message = f'ffmpeg could not read this file. {detail}'.strip()
+            raise TranscriptionError(message) from error
 
         except FileNotFoundError:
             temp_directory.rmdir()
@@ -309,12 +334,19 @@ class TranscriptionClient:
             except Exception as error:
                 last_error = error
 
+                log.warning(
+                    'chunk attempt failed  file=%s  attempt=%s/%s  error=%s',
+                    audio_chunk_file.name,
+                    attempt + 1,
+                    CHUNK_ATTEMPTS_MAX,
+                    last_error,
+                )
+
             else:
                 return transcription
 
         message = f'{audio_chunk_file.name} failed after {CHUNK_ATTEMPTS_MAX} attempts. {last_error}'
-
-        raise TranscriptionError(message)
+        raise TranscriptionError(message) from last_error
 
 
 class TranscriptPolisher:
@@ -370,12 +402,18 @@ class TranscriptPolisher:
             except Exception as error:
                 last_error = error
 
+                log.warning(
+                    'text model attempt failed  attempt=%s/%s  error=%s',
+                    attempt + 1,
+                    POLISH_ATTEMPTS_MAX,
+                    last_error,
+                )
+
             else:
                 return completion_text
 
         message = f'the text model failed after {POLISH_ATTEMPTS_MAX} attempts. {last_error}'
-
-        raise TranscriptionError(message)
+        raise TranscriptionError(message) from last_error
 
     def complete_many(self, instructions: str, contents: list[str]) -> list[str]:
         completion_texts: list[str] = [''] * len(contents)
@@ -564,6 +602,13 @@ class AudioFileTranscriber:
                     texts[index] = future.result()
 
                 except Exception:
+                    log.exception(
+                        'chunk failed  file=%s  piece=%s of %s',
+                        audio_file.name,
+                        index + 1,
+                        chunk_count,
+                    )
+
                     texts[index] = self.inaudible_marker(index)
                     gap_count += 1
 
@@ -601,6 +646,8 @@ class AudioFileTranscriber:
             notes = self.polisher.polish(transcript_text)
 
         except Exception as error:
+            log.exception('notes failed  file=%s', audio_file.name)
+
             return NotesOutput(error=error, notes_file=None)
 
         else:
@@ -650,19 +697,29 @@ class TranscriptionManager:
     def process(self, transcriber: AudioFileTranscriber, audio_file: Path) -> None:
         start_time = perf_counter()
         self.console.start(audio_file)
+        log.info('transcribe start  file=%s', audio_file.name)
 
         try:
             output = transcriber.transcribe_to_file(audio_file)
 
         except Exception as error:
+            log.exception('transcribe failed  file=%s', audio_file.name)
             self.console.failure(audio_file, error)
             self.fail_count += 1
 
         else:
             written_files = [file for file in (output.transcript_file, output.notes_file) if file]
-            self.console.success(audio_file, written_files[0], perf_counter() - start_time)
+            elapsed_seconds = perf_counter() - start_time
+            self.console.success(audio_file, written_files[0], elapsed_seconds)
             self.output_files.extend(written_files)
             self.success_count += 1
+
+            log.info(
+                'transcribe ok  file=%s  output=%s  seconds=%.0f',
+                audio_file.name,
+                written_files[0].name,
+                elapsed_seconds,
+            )
 
             if len(written_files) > 1:
                 self.console.notes(written_files[1])
@@ -671,7 +728,15 @@ class TranscriptionManager:
                 self.console.notes_failure(output.notes_error)
 
             if output.gap_count:
-                self.console.gaps(output.gap_count, output.gap_count * self.settings.segment_length_seconds)
+                gap_seconds = output.gap_count * self.settings.segment_length_seconds
+                self.console.gaps(output.gap_count, gap_seconds)
+                log.warning(
+                    'transcribe gaps  file=%s  gap_count=%s  gap_seconds=%s',
+                    audio_file.name,
+                    output.gap_count,
+                    gap_seconds,
+                )
+
                 self.gap_count += output.gap_count
                 self.gap_file_count += 1
 
@@ -686,19 +751,23 @@ class TranscriptionManager:
         if not self.settings.is_configured:
             detail = f'Expected a .env file beside the script: {SCRIPT_DIRECTORY}'
             self.console.error('No API settings were found.', detail)
+            log.error('no API settings were found. %s', detail)
 
             return 1
 
         if self.settings.output_mode not in OUTPUT_MODES:
             detail = f'MIMIR_OUTPUT_MODE must be one of: {OUTPUT_MODES}'
             self.console.error(f'Unknown output mode: {self.settings.output_mode}', detail)
+            log.error('unknown output mode: %s  %s', self.settings.output_mode, detail)
 
             return 1
 
         audio_files = self.collect_audio_files()
+        log.info('queued %s file(s)', len(audio_files))
 
         if not audio_files:
             self.console.warning('No audio files to transcribe.')
+            log.warning('no audio files to transcribe')
 
             return 0
 
@@ -713,12 +782,76 @@ class TranscriptionManager:
         return 0
 
 
+def configure_logging() -> None:
+    if log.handlers:
+        return
+
+    if LOG_PATH.exists() and LOG_PATH.stat().st_size:
+        with LOG_PATH.open('a', encoding='utf-8') as log_file:
+            log_file.write('\n')
+
+    formatter = logging.Formatter(
+        fmt='%(asctime)s  %(levelname)-8s  %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+
+    try:
+        handler = logging.FileHandler(LOG_PATH, encoding='utf-8')
+
+    except OSError:
+        print(f'   could not write log file: {LOG_PATH}', file=sys.stderr)
+
+        return
+
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    logging.captureWarnings(True)
+    logging.getLogger().addHandler(handler)
+    logging.getLogger().setLevel(logging.WARNING)
+    sys.excepthook = unhandled_exception
+
+
 def main() -> int:
+    configure_logging()
     Console.enable_ansi_colors()
     settings = TranscriptionSettings.from_environment()
     manager = TranscriptionManager(settings)
 
-    return manager.run()
+    log.info(
+        'session start  python=%s  output_mode=%s  audio_model=%s  text_model=%s  host=%s  key=%s',
+        sys.version.split()[0],
+        settings.output_mode,
+        settings.audio_model,
+        settings.text_model,
+        settings.api_host or '(missing)',
+        'set' if settings.api_key else 'missing',
+    )
+
+    exit_code = manager.run()
+
+    log.info(
+        'session end  transcribed=%s  failed=%s  gaps=%s',
+        manager.success_count,
+        manager.fail_count,
+        manager.gap_count,
+    )
+
+    return exit_code
+
+
+def unhandled_exception(
+    exception_type: type[BaseException],
+    exception: BaseException,
+    traceback_object: TracebackType | None,
+) -> None:
+    log.exception(
+        'unhandled exception',
+        exc_info=(exception_type, exception, traceback_object),
+    )
+
+    sys.__excepthook__(exception_type, exception, traceback_object)
 
 
 if __name__ == '__main__':

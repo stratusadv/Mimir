@@ -246,6 +246,11 @@ IF YOU MOVE THE MIMIR FOLDER
  IF SOMETHING GOES WRONG
 --------------------------------------------------------------------
 
+Mimir keeps a log file named mimir.log in this folder. Every line is
+stamped with the date and time from this computer. If something fails
+and the window closes, that file is the record of what happened. Send
+it if you need help.
+
 "FFmpeg did not install" or "uv did not install"
     The install was cancelled, or the computer has no internet. Try
     running setup.bat again.

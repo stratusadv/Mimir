@@ -408,6 +408,7 @@ echo.
 
 if not exist "%APP_DIR%.env" (
     echo    !C_WARN!Mimir cannot transcribe until the .env file is in place.!C_RESET!
+    echo    !C_MUTED!Copy app\.env.example to app\.env and fill it in.!C_RESET!
     echo    !C_MUTED!See FIRST TIME SETUP in README.txt.!C_RESET!
     echo.
 )

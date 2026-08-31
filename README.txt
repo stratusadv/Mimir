@@ -16,7 +16,8 @@ a plain text transcript appears right next to that file.
     setup.bat         gets the computer ready. Run it once, or never
                       - Mimir runs it for you.
     README.txt        this file.
-    app               the machinery, and the .env settings file.
+    app               the machinery, the .env settings file, and
+                      the .env.example template it is copied from.
 
 Everything inside "app" looks after itself. Leave it alone, apart
 from the .env file described under FIRST TIME SETUP.
@@ -38,8 +39,10 @@ from the .env file described under FIRST TIME SETUP.
 4. Wait. A percentage counts up for each file. A one hour recording
    usually takes a couple of minutes.
 
-5. When it finishes you can press O to open the folder with your new
-   transcript in it, R to transcribe something else, or Q to close.
+5. When it finishes you can press T to open a transcript, O to open
+   the folder it was saved in, R to transcribe something else, or Q
+   to close. If there is more than one transcript, T lists them and
+   asks which one to open.
 
 You can also just double-click the Mimir shortcut and type or paste
 a file path when it asks.
@@ -119,7 +122,11 @@ WHAT IT INSTALLS
 THE ONE THING SETUP CANNOT DO
     There must be a file called ".env" sitting inside the "app"
     folder. It holds the address and key for the transcription
-    service:
+    service.
+
+    A blank template sits beside it called ".env.example". Copy
+    that file, rename the copy to ".env", and put the real address
+    and key into it:
 
         AI_API_KEY=your-key-here
         AI_API_HOST=https://your-service-address

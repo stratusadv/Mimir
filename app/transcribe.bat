@@ -53,7 +53,8 @@ if not exist "%SCRIPT_DIR%.env" (
     echo    !C_FAIL![ERROR]!C_RESET! Missing settings file.
     echo.
     echo    !C_MUTED!A file named .env must sit beside this script, holding the!C_RESET!
-    echo    !C_MUTED!transcription service address and key. See README.txt.!C_RESET!
+    echo    !C_MUTED!transcription service address and key. Copy .env.example!C_RESET!
+    echo    !C_MUTED!to .env and fill it in. See README.txt.!C_RESET!
     echo.
     pause
     goto :terminate
@@ -121,6 +122,7 @@ del /q "%LIST_FILE%" >nul 2>nul
 echo.
 
 call :load_results
+call :draw_ai_warning
 
 :finish_menu
 if !result_count!==0 (
@@ -221,12 +223,17 @@ set "row_name=%~nx1"
 echo      !C_MUTED!-!C_RESET! !row_name!
 goto :eof
 
+:draw_ai_warning
+echo    !C_WARN!AI can make mistakes. Review the transcript before you rely on it.!C_RESET!
+echo.
+goto :eof
+
 :draw_header
 echo.
 echo    !C_ACCENT!!RULE!!C_RESET!
 echo     !C_WHITE!MIMIR!C_RESET!  !C_MUTED!audio to text!C_RESET!
 echo    !C_ACCENT!!RULE!!C_RESET!
-echo.
+call :draw_ai_warning
 goto :eof
 
 :terminate

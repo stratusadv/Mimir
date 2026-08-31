@@ -7,6 +7,19 @@ a plain text transcript appears right next to that file.
 
 
 --------------------------------------------------------------------
+ WHAT IS IN THIS FOLDER
+--------------------------------------------------------------------
+
+    transcribe.bat    the one you use. Drop audio on it.
+    setup.bat         gets the computer ready. Run it once, or never
+                      - transcribe.bat runs it for you.
+    README.txt        this file.
+    assets            the Mimir logo, used for the right-click menu.
+
+Anything else in here is machinery. Leave it alone.
+
+
+--------------------------------------------------------------------
  HOW TO USE IT
 --------------------------------------------------------------------
 
@@ -16,7 +29,7 @@ a plain text transcript appears right next to that file.
    "transcribe.bat" and let go.
 
 3. A black window opens and lists what it is about to transcribe.
-   Press S to start, or Q to quit.
+   Press S to start, Q to quit, or M to manage the right-click menu.
 
 4. Wait. A percentage counts up for each file. A one hour recording
    usually takes a couple of minutes.
@@ -26,6 +39,11 @@ a plain text transcript appears right next to that file.
 
 You can also just double-click "transcribe.bat" and type or paste a
 file path when it asks.
+
+Better still, let Mimir add itself to your right-click menu the first
+time it runs - see THE RIGHT-CLICK MENU below. After that you can
+right-click any audio file, anywhere, and pick "Transcribe with
+Mimir" without opening this folder at all.
 
 
 --------------------------------------------------------------------
@@ -60,35 +78,120 @@ you how many files it skipped.
  FIRST TIME SETUP
 --------------------------------------------------------------------
 
-There is nothing to install by hand.
+There is nothing to install by hand, and nothing you have to run
+first. Every time transcribe.bat starts it quietly checks the
+computer, and only speaks up if something is missing.
 
-The first time you run Mimir on a computer it checks for the two free
-programs it depends on:
+If you would rather see the whole picture, double-click "setup.bat".
+It checks everything, fixes what it can, and finishes with a report:
 
-    FFmpeg    reads the audio
-    uv        runs the transcriber
+    Everything Mimir needs:
 
-If either one is missing, Mimir lists it and asks:
+      [ OK ] FFmpeg            reads the audio
+      [ OK ] uv                runs the transcriber
+      [ OK ] Python            a private copy, kept by uv
+      [ OK ] Settings file     holds the service address and key
+      [ OK ] Right-click menu  "Transcribe with Mimir"
 
-    Install them now? [Y] yes   [N] quit
+WHAT IT INSTALLS
+    FFmpeg and uv are two small free programs, installed once per
+    computer through the App Installer that comes with Windows. If
+    either is missing Mimir lists it and asks:
 
-Press Y. Mimir installs them for you, and Windows may pop up a box
-asking for permission - choose Yes. When it finishes, Mimir carries
-straight on to the transcribing screen.
+        Install them now? [Y] yes   [N] quit
 
-Very occasionally Windows needs the window closed and reopened before
-it notices the new programs. Mimir will say so if that happens. Just
-run transcribe.bat again.
+    Press Y. Windows may pop up a box asking for permission - choose
+    Yes. Very occasionally Windows needs the window closed and
+    reopened before it notices the new programs. Mimir says so if
+    that happens, and you just run it again.
 
-There must also be a file called ".env" sitting in this folder. It
-holds the address and key for the transcription service:
+    Python is handled separately. Mimir does not use, change, or
+    care about any Python already on the computer - uv fetches a
+    private copy that belongs to Mimir alone.
 
-    AI_API_KEY=your-key-here
-    AI_API_HOST=https://your-service-address
-    LLM_AUDIO_MODEL=stratus.listen
+THE ONE THING SETUP CANNOT DO
+    There must be a file called ".env" sitting in this folder. It
+    holds the address and key for the transcription service:
 
-That one Mimir cannot create for you. Do not share it, and do not put
-it on the internet. It is the key to the account.
+        AI_API_KEY=your-key-here
+        AI_API_HOST=https://your-service-address
+        LLM_AUDIO_MODEL=stratus.listen
+
+    Setup will tell you if it is missing, but it cannot invent one.
+    Do not share that file and do not put it on the internet. It is
+    the key to the account.
+
+
+--------------------------------------------------------------------
+ THE RIGHT-CLICK MENU
+--------------------------------------------------------------------
+
+Mimir can put itself into the Windows right-click menu, so you never
+have to go looking for transcribe.bat again.
+
+The first time you run it, Mimir asks:
+
+    Add Mimir to your right-click menu?
+    Add it? [Y] yes   [N] no thanks
+
+Press Y and it sets itself up. It only asks once. To change your mind
+later, run setup.bat, or run transcribe.bat and press M at the main
+menu - that adds it if it is missing and removes it if it is there.
+
+Once it is on, you get "Transcribe with Mimir" when you right-click:
+
+    an audio file          transcribes that file
+    several audio files    transcribes all of them together
+    a folder               transcribes every audio file inside
+    empty space in a       opens Mimir for that folder
+      folder window
+    the desktop            opens Mimir and asks for a path
+
+The Mimir logo appears beside the menu entry.
+
+WINDOWS 11 AND THE SHORT MENU
+    Windows 11 shows a short right-click menu and hides everything
+    else behind "Show more options" at the bottom. Mimir lives down
+    there, because Windows only lets apps installed from the
+    Microsoft Store into the short menu. No script can put itself
+    there.
+
+    The quickest way to reach Mimir is Shift+F10 instead of a
+    right-click - that opens the long menu directly, with Mimir
+    already in it.
+
+    There is one other way, and Mimir will never do it unless you go
+    looking for it. Windows 11 can be told to drop the short menu
+    altogether and use the full-length menu Windows 10 had, which
+    puts Mimir on the very first right-click. To do that, run
+    setup.bat and choose "show Mimir in the first menu". It explains
+    itself and asks again before changing anything.
+
+    Worth knowing if you are considering it:
+
+      - It changes every right-click menu, not only Mimir.
+      - Your account only. Nobody else on the computer is affected,
+        and no administrator rights are needed.
+      - The screen flickers once while Windows restarts the desktop,
+        and open File Explorer windows close. Files and programs are
+        untouched.
+      - Reversible. Run setup.bat and choose to bring the short menu
+        back.
+
+    Mimir never suggests this on its own, and installing the
+    right-click entry does not change your menu style.
+
+WHAT IT ACTUALLY CHANGES
+    A handful of registry values under
+    HKEY_CURRENT_USER\Software\Classes. That is your account only:
+    nothing is copied or installed anywhere, and removing the menu
+    deletes exactly those values and nothing else.
+
+IF YOU MOVE THE MIMIR FOLDER
+    The menu entry remembers where the folder was. After moving it,
+    run setup.bat from its new home and press M twice - once to
+    remove the old entry, once to add it back pointing at the new
+    location.
 
 
 --------------------------------------------------------------------
@@ -97,11 +200,22 @@ it on the internet. It is the key to the account.
 
 "FFmpeg did not install" or "uv did not install"
     The install was cancelled, or the computer has no internet. Try
-    running transcribe.bat again.
+    running setup.bat again.
 
 "This computer is missing the Windows App Installer"
     Mimir cannot install anything without it. Open the Microsoft
     Store, search for "App Installer", install it, and try again.
+
+"Python could not be set up"
+    Mimir could not download its private copy of Python. Almost
+    always a blocked or missing internet connection.
+
+"setup.bat is missing from this folder"
+    Only part of Mimir was copied. Copy the whole folder.
+
+The right-click entry is missing, or does nothing
+    The Mimir folder was probably moved or renamed. Run setup.bat and
+    press M twice to point it at the new place.
 
 "Missing settings file"
     The .env file is not in this folder. Copy the whole Mimir folder,
@@ -124,8 +238,8 @@ bottom counts how many worked and how many did not.
  MOVING IT TO ANOTHER COMPUTER
 --------------------------------------------------------------------
 
-Copy the whole folder. The first run on the new computer offers to
-install FFmpeg and uv, so there is nothing else to prepare.
+Copy the whole folder. Run setup.bat once on the new machine, or just
+use transcribe.bat and let it sort itself out.
 
 If you would rather not install FFmpeg on every machine, put
 "ffmpeg.exe" in a folder named "tools" beside "transcribe.bat" and

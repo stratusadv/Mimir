@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import random
 import re
 import subprocess
 import sys
@@ -18,12 +19,15 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 
+CHUNK_ATTEMPTS_MAX = 4
+CHUNK_RETRY_BACKOFF_SECONDS = 1.5
+CHUNK_RETRY_JITTER_SECONDS = 0.5
 CHUNK_WORKERS_MAX = 10
 OUTPUT_ATTEMPTS_MAX = 999
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
@@ -59,6 +63,14 @@ class Console:
         if detail:
             print(f'   {self.MUTED}{detail}{self.RESET}')
 
+    def gaps(self, gap_count: int, gap_seconds: int) -> None:
+        piece_label = 'piece' if gap_count == 1 else 'pieces'
+
+        print(
+            f'         {self.WARN}{gap_count} {piece_label} could not be transcribed; '
+            f'{gap_seconds} seconds marked [inaudible] in the transcript{self.RESET}'
+        )
+
     def failure(self, audio_file: Path, error: Exception) -> None:
         print(f'{self.CLEAR_LINE}   {self.FAIL}[FAIL]{self.RESET} {audio_file.name}')
         print(f'         {self.MUTED}{error}{self.RESET}')
@@ -85,10 +97,19 @@ class Console:
 
         print(f'         {self.MUTED}{elapsed_seconds:.0f} seconds{self.RESET}')
 
-    def summary(self, success_count: int, fail_count: int) -> None:
+    def summary(self, success_count: int, fail_count: int, gap_file_count: int, gap_count: int) -> None:
         print()
         print(f'   {self.MUTED}{self.RULE}{self.RESET}')
         print(f'    {self.OK}{success_count} transcribed{self.RESET}   {self.FAIL}{fail_count} failed{self.RESET}')
+
+        if gap_count:
+            file_label = 'file' if gap_file_count == 1 else 'files'
+            piece_label = 'piece' if gap_count == 1 else 'pieces'
+
+            print(
+                f'    {self.WARN}{gap_count} audio {piece_label} missing across '
+                f'{gap_file_count} {file_label}; search transcripts for [inaudible]{self.RESET}'
+            )
 
     def warning(self, message: str) -> None:
         print(f'   {self.WARN}{message}{self.RESET}')
@@ -204,7 +225,7 @@ class TranscriptionClient:
         self.settings = settings
         self.client = OpenAI(api_key=settings.api_key, base_url=settings.base_url)
 
-    def transcribe_chunk(self, audio_chunk_file: Path) -> str:
+    def request_chunk_transcription(self, audio_chunk_file: Path) -> str:
         with open(audio_chunk_file, 'rb') as audio_file:
             transcription = self.client.audio.transcriptions.create(
                 model=self.settings.audio_model,
@@ -217,6 +238,45 @@ class TranscriptionClient:
             raise TranscriptionError(message)
 
         return transcription.text if transcription.text else ''
+
+    def transcribe_chunk(self, audio_chunk_file: Path) -> str:
+        last_error: Exception | None = None
+
+        for attempt in range(CHUNK_ATTEMPTS_MAX):
+            if attempt:
+                backoff_seconds = CHUNK_RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1)
+                sleep(backoff_seconds + random.uniform(0.0, CHUNK_RETRY_JITTER_SECONDS))
+
+            try:
+                transcription = self.request_chunk_transcription(audio_chunk_file)
+
+            except Exception as error:
+                last_error = error
+
+            else:
+                return transcription
+
+        message = f'{audio_chunk_file.name} failed after {CHUNK_ATTEMPTS_MAX} attempts. {last_error}'
+
+        raise TranscriptionError(message)
+
+
+@dataclass(frozen=True)
+class ChunkTranscriptions:
+    gap_count: int
+    texts: list[str]
+
+
+@dataclass(frozen=True)
+class TranscriptionOutput:
+    gap_count: int
+    output_file: Path
+
+
+@dataclass(frozen=True)
+class TranscriptionResult:
+    gap_count: int
+    text: str
 
 
 class AudioFileTranscriber:
@@ -253,26 +313,49 @@ class AudioFileTranscriber:
 
         return output_file
 
-    def transcribe(self, audio_file: Path) -> str:
+    def inaudible_marker(self, chunk_index: int) -> str:
+        segment_length_seconds = self.chunker.segment_length_seconds
+        start_seconds = chunk_index * segment_length_seconds
+        end_seconds = start_seconds + segment_length_seconds
+
+        return f'[inaudible {self.timestamp_label(start_seconds)}-{self.timestamp_label(end_seconds)}]'
+
+    @staticmethod
+    def timestamp_label(total_seconds: int) -> str:
+        hours, remainder_seconds = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder_seconds, 60)
+
+        if hours:
+            return f'{hours}:{minutes:02d}:{seconds:02d}'
+
+        return f'{minutes:02d}:{seconds:02d}'
+
+    def transcribe(self, audio_file: Path) -> TranscriptionResult:
         with self.chunker.chunk(audio_file) as chunk_set:
             if not chunk_set.chunk_files:
                 message = 'no audio could be read out of this file.'
                 raise TranscriptionError(message)
 
-            transcriptions = self.transcribe_chunks(audio_file, chunk_set)
+            chunk_transcriptions = self.transcribe_chunks(audio_file, chunk_set)
 
-        result = ' '.join(text for text in transcriptions if text)
+        if chunk_transcriptions.gap_count == len(chunk_transcriptions.texts):
+            message = f'every piece of audio failed to transcribe ({chunk_transcriptions.gap_count} pieces).'
 
-        if not result:
+            raise TranscriptionError(message)
+
+        text = ' '.join(text for text in chunk_transcriptions.texts if text)
+
+        if not text:
             message = 'the service returned no words for this audio.'
             raise TranscriptionError(message)
 
-        return result
+        return TranscriptionResult(gap_count=chunk_transcriptions.gap_count, text=text)
 
-    def transcribe_chunks(self, audio_file: Path, chunk_set: AudioChunkSet) -> list[str]:
+    def transcribe_chunks(self, audio_file: Path, chunk_set: AudioChunkSet) -> ChunkTranscriptions:
         chunk_count = len(chunk_set)
-        transcriptions: list[str] = [''] * chunk_count
+        texts: list[str] = [''] * chunk_count
         complete_count = 0
+        gap_count = 0
 
         with ThreadPoolExecutor(max_workers=self.workers_max) as thread_executor:
             future_to_index = {
@@ -284,22 +367,23 @@ class AudioFileTranscriber:
                 index: int = future_to_index[future]
 
                 try:
-                    transcriptions[index] = future.result()
+                    texts[index] = future.result()
 
                 except Exception:
-                    transcriptions[index] = ''
+                    texts[index] = self.inaudible_marker(index)
+                    gap_count += 1
 
                 complete_count += 1
                 self.console.progress(audio_file, complete_count, chunk_count)
 
-        return transcriptions
+        return ChunkTranscriptions(gap_count=gap_count, texts=texts)
 
-    def transcribe_to_file(self, audio_file: Path) -> Path:
+    def transcribe_to_file(self, audio_file: Path) -> TranscriptionOutput:
         output_file = self.free_output_file(audio_file)
-        transcription = self.transcribe(audio_file)
-        output_file.write_text(self.format_transcription(transcription), encoding='utf-8')
+        result = self.transcribe(audio_file)
+        output_file.write_text(self.format_transcription(result.text), encoding='utf-8')
 
-        return output_file
+        return TranscriptionOutput(gap_count=result.gap_count, output_file=output_file)
 
 
 class TranscriptionManager:
@@ -307,6 +391,8 @@ class TranscriptionManager:
         self.settings = settings
         self.console = console if console else Console()
         self.fail_count = 0
+        self.gap_count = 0
+        self.gap_file_count = 0
         self.last_output_file: Path | None = None
         self.success_count = 0
 
@@ -338,16 +424,21 @@ class TranscriptionManager:
         self.console.start(audio_file)
 
         try:
-            output_file = transcriber.transcribe_to_file(audio_file)
+            output = transcriber.transcribe_to_file(audio_file)
 
         except Exception as error:
             self.console.failure(audio_file, error)
             self.fail_count += 1
 
         else:
-            self.console.success(audio_file, output_file, perf_counter() - start_time)
-            self.last_output_file = output_file
+            self.console.success(audio_file, output.output_file, perf_counter() - start_time)
+            self.last_output_file = output.output_file
             self.success_count += 1
+
+            if output.gap_count:
+                self.console.gaps(output.gap_count, output.gap_count * self.settings.segment_length_seconds)
+                self.gap_count += output.gap_count
+                self.gap_file_count += 1
 
     def report_result_file(self) -> None:
         if self.settings.result_file and self.last_output_file:
@@ -372,7 +463,7 @@ class TranscriptionManager:
         for audio_file in audio_files:
             self.process(transcriber, audio_file)
 
-        self.console.summary(self.success_count, self.fail_count)
+        self.console.summary(self.success_count, self.fail_count, self.gap_file_count, self.gap_count)
         self.report_result_file()
 
         return 0

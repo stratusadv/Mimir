@@ -393,7 +393,7 @@ class TranscriptionManager:
         self.fail_count = 0
         self.gap_count = 0
         self.gap_file_count = 0
-        self.last_output_file: Path | None = None
+        self.output_files: list[Path] = []
         self.success_count = 0
 
     @staticmethod
@@ -432,7 +432,7 @@ class TranscriptionManager:
 
         else:
             self.console.success(audio_file, output.output_file, perf_counter() - start_time)
-            self.last_output_file = output.output_file
+            self.output_files.append(output.output_file)
             self.success_count += 1
 
             if output.gap_count:
@@ -441,8 +441,11 @@ class TranscriptionManager:
                 self.gap_file_count += 1
 
     def report_result_file(self) -> None:
-        if self.settings.result_file and self.last_output_file:
-            self.settings.result_file.write_text(str(self.last_output_file), encoding='utf-8')
+        if not (self.settings.result_file and self.output_files):
+            return
+
+        lines = '\n'.join(str(output_file) for output_file in self.output_files)
+        self.settings.result_file.write_text(lines, encoding='utf-8')
 
     def run(self) -> int:
         if not self.settings.is_configured:

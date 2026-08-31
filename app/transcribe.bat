@@ -120,13 +120,68 @@ uv run --script "%SCRIPT_DIR%audio_transcription.py" "%LIST_FILE%"
 del /q "%LIST_FILE%" >nul 2>nul
 echo.
 
-choice /c ORQ /n /m "   [O] open folder   [R] transcribe again   [Q] quit: "
-if errorlevel 3 goto :terminate
-if errorlevel 2 goto :menu
-if exist "%RESULT_FILE%" (
-    for /f "usebackq delims=" %%r in ("%RESULT_FILE%") do start "" explorer.exe /select,"%%r"
+call :load_results
+
+:finish_menu
+if !result_count!==0 (
+    choice /c RQ /n /m "   [R] transcribe again   [Q] quit: "
+    if errorlevel 2 goto :terminate
+    goto :menu
 )
+
+choice /c TORQ /n /m "   [T] open transcript   [O] open folder   [R] transcribe again   [Q] quit: "
+set "finish_picked=!errorlevel!"
+if !finish_picked!==4 goto :terminate
+if !finish_picked!==3 goto :menu
+if !finish_picked!==2 (
+    start "" explorer.exe /select,"!result_1!"
+    goto :terminate
+)
+call :open_transcript
 goto :terminate
+
+:load_results
+set "result_count=0"
+if not exist "%RESULT_FILE%" goto :eof
+for /f "usebackq delims=" %%r in ("%RESULT_FILE%") do (
+    set /a result_count+=1
+    set "result_!result_count!=%%~fr"
+)
+goto :eof
+
+:open_transcript
+if !result_count!==1 (
+    start "" "!result_1!"
+    goto :eof
+)
+
+:open_transcript_prompt
+cls
+call :draw_header
+echo    !C_WHITE!Transcripts: !result_count!!C_RESET!
+for /l %%i in (1,1,!result_count!) do call :draw_result_row %%i
+echo.
+set "pick="
+set /p "pick=   Number to open (blank to go back): "
+if not defined pick goto :eof
+set "pick=!pick:"=!"
+echo(!pick!|findstr /r "^[1-9][0-9]*$" >nul
+if errorlevel 1 goto :open_transcript_retry
+if !pick! gtr !result_count! goto :open_transcript_retry
+call set "open_target=%%result_!pick!%%"
+start "" "!open_target!"
+goto :eof
+
+:open_transcript_retry
+echo.
+echo    !C_WARN!Enter a number between 1 and !result_count!.!C_RESET!
+timeout /t 2 /nobreak >nul
+goto :open_transcript_prompt
+
+:draw_result_row
+call set "row_path=%%result_%1%%"
+for %%p in ("!row_path!") do echo      !C_MUTED![%1]!C_RESET! %%~nxp
+goto :eof
 
 :add_file
 set "candidate_extension=%~x1"

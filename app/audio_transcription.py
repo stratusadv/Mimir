@@ -29,9 +29,39 @@ CHUNK_ATTEMPTS_MAX = 4
 CHUNK_RETRY_BACKOFF_SECONDS = 1.5
 CHUNK_RETRY_JITTER_SECONDS = 0.5
 CHUNK_WORKERS_MAX = 10
+CLEANUP_INSTRUCTIONS = (
+    'You are cleaning up a raw speech-to-text transcript of a meeting. '
+    'Add punctuation, capitalisation and paragraph breaks so that it reads well. '
+    'Fix a mis-heard word only when the intended word is obvious. '
+    'Never add, drop, shorten or reorder what was said, and never answer or comment on it. '
+    'Keep every [inaudible ...] marker exactly where it appears. '
+    'Reply with the cleaned transcript only.'
+)
 OUTPUT_ATTEMPTS_MAX = 999
+OUTPUT_MODE_BOTH = 'both'
+OUTPUT_MODE_NOTES = 'notes'
+OUTPUT_MODE_TRANSCRIPT = 'transcript'
+OUTPUT_MODES = (OUTPUT_MODE_BOTH, OUTPUT_MODE_NOTES, OUTPUT_MODE_TRANSCRIPT)
+POLISH_ATTEMPTS_MAX = 3
+POLISH_CHARACTERS_MAX = 12000
+POLISH_RETRY_BACKOFF_SECONDS = 2.0
+POLISH_TIMEOUT_SECONDS = 180.0
+POLISH_WORKERS_MAX = 4
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+SECTION_INSTRUCTIONS = (
+    'You are taking notes on one part of a longer meeting transcript. '
+    'Reply with up to six "- " bullet points covering what was decided, discussed and assigned. '
+    'Name the speaker or the owner when the transcript names one. '
+    'Reply with the bullet points only.'
+)
 SEGMENT_LENGTH_SECONDS = 30
+SUMMARY_INSTRUCTIONS = (
+    'You are writing meeting notes from a transcript. '
+    'Reply with exactly these two sections and nothing else. '
+    'First a line reading SUMMARY, then a short paragraph, then up to eight "- " bullet points. '
+    'Then a line reading ACTION ITEMS, then one "- " bullet per task, naming the owner when the '
+    'transcript names one, or a single bullet reading "- None stated." when there are no tasks.'
+)
 SUPPORTED_AUDIO_EXTENSIONS = ('mp3', 'wav', 'flac', 'mp4', 'mpeg', 'ogg', 'm4a', 'webm')
 
 
@@ -62,6 +92,20 @@ class Console:
 
         if detail:
             print(f'   {self.MUTED}{detail}{self.RESET}')
+
+    def notes(self, notes_file: Path) -> None:
+        print(f'         {self.MUTED}notes{self.RESET} {self.OK}{notes_file.name}{self.RESET}')
+
+    def notes_failure(self, error: Exception) -> None:
+        print(f'         {self.WARN}Notes could not be written; the transcript is unchanged.{self.RESET}')
+        print(f'         {self.MUTED}{error}{self.RESET}')
+
+    def notes_start(self, audio_file: Path) -> None:
+        print(
+            f'{self.CLEAR_LINE}{self.MUTED}   [ .. ] writing notes for {audio_file.name}{self.RESET}',
+            end='',
+            flush=True,
+        )
 
     def gaps(self, gap_count: int, gap_seconds: int) -> None:
         piece_label = 'piece' if gap_count == 1 else 'pieces'
@@ -121,8 +165,10 @@ class TranscriptionSettings:
     api_key: str | None
     audio_model: str
     chunk_workers_max: int
+    output_mode: str
     result_file: Path | None
     segment_length_seconds: int
+    text_model: str
 
     @classmethod
     def from_environment(cls) -> TranscriptionSettings:
@@ -135,8 +181,10 @@ class TranscriptionSettings:
             api_key=os.getenv('AI_API_KEY'),
             audio_model=os.getenv('LLM_AUDIO_MODEL', 'stratus.listen'),
             chunk_workers_max=CHUNK_WORKERS_MAX,
+            output_mode=os.getenv('MIMIR_OUTPUT_MODE', OUTPUT_MODE_TRANSCRIPT).strip().lower(),
             result_file=Path(result_path_file) if result_path_file else None,
             segment_length_seconds=SEGMENT_LENGTH_SECONDS,
+            text_model=os.getenv('LLM_TEXT_MODEL', 'stratus.thinking'),
         )
 
     @property
@@ -146,6 +194,14 @@ class TranscriptionSettings:
     @property
     def is_configured(self) -> bool:
         return bool(self.api_host and self.api_key)
+
+    @property
+    def keeps_transcript(self) -> bool:
+        return self.output_mode in (OUTPUT_MODE_BOTH, OUTPUT_MODE_TRANSCRIPT)
+
+    @property
+    def writes_notes(self) -> bool:
+        return self.output_mode in (OUTPUT_MODE_BOTH, OUTPUT_MODE_NOTES)
 
 
 class AudioChunkSet:
@@ -261,6 +317,108 @@ class TranscriptionClient:
         raise TranscriptionError(message)
 
 
+class TranscriptPolisher:
+    def __init__(self, settings: TranscriptionSettings) -> None:
+        self.settings = settings
+        self.client = OpenAI(api_key=settings.api_key, base_url=settings.base_url)
+
+    @staticmethod
+    def chunk_lines(lines: list[str], characters_max: int) -> list[str]:
+        chunks: list[str] = []
+        current_lines: list[str] = []
+        current_length = 0
+
+        for line in lines:
+            if current_lines and current_length + len(line) > characters_max:
+                chunks.append('\n'.join(current_lines))
+                current_lines = []
+                current_length = 0
+
+            current_lines.append(line)
+            current_length += len(line) + 1
+
+        if current_lines:
+            chunks.append('\n'.join(current_lines))
+
+        return chunks
+
+    def request_completion(self, instructions: str, content: str) -> str:
+        system_message = {'role': 'system', 'content': instructions}
+        user_message = {'role': 'user', 'content': content}
+        messages = [system_message, user_message]
+
+        completion = self.client.chat.completions.create(
+            model=self.settings.text_model,
+            messages=messages,
+            timeout=POLISH_TIMEOUT_SECONDS,
+        )
+
+        message_content = completion.choices[0].message.content
+
+        return message_content if message_content else ''
+
+    def complete(self, instructions: str, content: str) -> str:
+        last_error: Exception | None = None
+
+        for attempt in range(POLISH_ATTEMPTS_MAX):
+            if attempt:
+                sleep(POLISH_RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1))
+
+            try:
+                completion_text = self.request_completion(instructions, content)
+
+            except Exception as error:
+                last_error = error
+
+            else:
+                return completion_text
+
+        message = f'the text model failed after {POLISH_ATTEMPTS_MAX} attempts. {last_error}'
+
+        raise TranscriptionError(message)
+
+    def complete_many(self, instructions: str, contents: list[str]) -> list[str]:
+        completion_texts: list[str] = [''] * len(contents)
+
+        with ThreadPoolExecutor(max_workers=POLISH_WORKERS_MAX) as thread_executor:
+            future_to_index = {
+                thread_executor.submit(self.complete, instructions, content): index
+                for index, content in enumerate(contents)
+            }
+
+            for future in as_completed(future_to_index):
+                index: int = future_to_index[future]
+                completion_texts[index] = future.result().strip()
+
+        return completion_texts
+
+    def summarize(self, cleaned_chunks: list[str]) -> str:
+        if len(cleaned_chunks) == 1:
+            return self.complete(SUMMARY_INSTRUCTIONS, cleaned_chunks[0]).strip()
+
+        section_notes = self.complete_many(SECTION_INSTRUCTIONS, cleaned_chunks)
+        joined_notes = '\n'.join(text for text in section_notes if text)
+
+        return self.complete(SUMMARY_INSTRUCTIONS, joined_notes).strip()
+
+    def polish(self, transcript_text: str) -> TranscriptNotes:
+        chunks = self.chunk_lines(transcript_text.splitlines(), POLISH_CHARACTERS_MAX)
+        cleaned_chunks = self.complete_many(CLEANUP_INSTRUCTIONS, chunks)
+        cleaned_text = '\n\n'.join(text for text in cleaned_chunks if text)
+
+        if not cleaned_text:
+            message = 'the text model returned no cleaned transcript.'
+            raise TranscriptionError(message)
+
+        summary_text = self.summarize(cleaned_chunks)
+
+        if not summary_text:
+            message = 'the text model returned no summary.'
+            raise TranscriptionError(message)
+
+        return TranscriptNotes(cleaned_text=cleaned_text, summary_text=summary_text)
+
+
 @dataclass(frozen=True)
 class ChunkTranscriptions:
     gap_count: int
@@ -268,9 +426,23 @@ class ChunkTranscriptions:
 
 
 @dataclass(frozen=True)
+class TranscriptNotes:
+    cleaned_text: str
+    summary_text: str
+
+
+@dataclass(frozen=True)
+class NotesOutput:
+    error: Exception | None
+    notes_file: Path | None
+
+
+@dataclass(frozen=True)
 class TranscriptionOutput:
     gap_count: int
-    output_file: Path
+    notes_error: Exception | None
+    notes_file: Path | None
+    transcript_file: Path | None
 
 
 @dataclass(frozen=True)
@@ -285,31 +457,53 @@ class AudioFileTranscriber:
             chunker: AudioChunker,
             client: TranscriptionClient,
             console: Console,
+            keep_transcript: bool = True,
+            polisher: TranscriptPolisher | None = None,
             workers_max: int = CHUNK_WORKERS_MAX,
     ) -> None:
         self.chunker = chunker
         self.client = client
         self.console = console
+        self.keep_transcript = keep_transcript
+        self.polisher = polisher
         self.workers_max = workers_max
+
+    @staticmethod
+    def format_notes(audio_file: Path, notes: TranscriptNotes) -> str:
+        sections = [
+            'MIMIR NOTES',
+            audio_file.name,
+            '',
+            'AI wrote these notes from the transcript. Check them before you rely on them.',
+            '',
+            notes.summary_text,
+            '',
+            'CLEANED TRANSCRIPT',
+            '',
+            notes.cleaned_text,
+            '',
+        ]
+
+        return '\n'.join(sections)
 
     @staticmethod
     def format_transcription(transcription: str) -> str:
         return re.sub(r'([.!?])\s+', r'\1\n', transcription)
 
     @staticmethod
-    def free_output_file(audio_file: Path) -> Path:
+    def free_output_file(audio_file: Path, name_suffix: str) -> Path:
         base_name = audio_file.stem.lower().replace(' ', '_')
-        output_file = audio_file.with_name(f'{base_name}_transcript.txt')
+        output_file = audio_file.with_name(f'{base_name}_{name_suffix}.txt')
         attempt = 0
 
         while output_file.exists():
             attempt += 1
 
             if attempt > OUTPUT_ATTEMPTS_MAX:
-                message = 'too many existing transcripts with that name.'
+                message = f'too many existing files named {base_name}_{name_suffix}.'
                 raise TranscriptionError(message)
 
-            output_file = audio_file.with_name(f'{base_name}_transcript ({attempt}).txt')
+            output_file = audio_file.with_name(f'{base_name}_{name_suffix} ({attempt}).txt')
 
         return output_file
 
@@ -379,11 +573,41 @@ class AudioFileTranscriber:
         return ChunkTranscriptions(gap_count=gap_count, texts=texts)
 
     def transcribe_to_file(self, audio_file: Path) -> TranscriptionOutput:
-        output_file = self.free_output_file(audio_file)
+        transcript_file = self.free_output_file(audio_file, 'transcript')
         result = self.transcribe(audio_file)
-        output_file.write_text(self.format_transcription(result.text), encoding='utf-8')
+        transcript_text = self.format_transcription(result.text)
+        transcript_file.write_text(transcript_text, encoding='utf-8')
+        notes_output = self.write_notes(audio_file, transcript_text)
+        kept_transcript_file: Path | None = transcript_file
 
-        return TranscriptionOutput(gap_count=result.gap_count, output_file=output_file)
+        if notes_output.notes_file and not self.keep_transcript:
+            transcript_file.unlink(missing_ok=True)
+            kept_transcript_file = None
+
+        return TranscriptionOutput(
+            gap_count=result.gap_count,
+            notes_error=notes_output.error,
+            notes_file=notes_output.notes_file,
+            transcript_file=kept_transcript_file,
+        )
+
+    def write_notes(self, audio_file: Path, transcript_text: str) -> NotesOutput:
+        if self.polisher is None:
+            return NotesOutput(error=None, notes_file=None)
+
+        self.console.notes_start(audio_file)
+
+        try:
+            notes = self.polisher.polish(transcript_text)
+
+        except Exception as error:
+            return NotesOutput(error=error, notes_file=None)
+
+        else:
+            notes_file = self.free_output_file(audio_file, 'notes')
+            notes_file.write_text(self.format_notes(audio_file, notes), encoding='utf-8')
+
+            return NotesOutput(error=None, notes_file=notes_file)
 
 
 class TranscriptionManager:
@@ -412,10 +636,14 @@ class TranscriptionManager:
         return audio_files
 
     def build_transcriber(self) -> AudioFileTranscriber:
+        polisher = TranscriptPolisher(self.settings) if self.settings.writes_notes else None
+
         return AudioFileTranscriber(
             chunker=AudioChunker(self.settings.segment_length_seconds),
             client=TranscriptionClient(self.settings),
             console=self.console,
+            keep_transcript=self.settings.keeps_transcript,
+            polisher=polisher,
             workers_max=self.settings.chunk_workers_max,
         )
 
@@ -431,9 +659,16 @@ class TranscriptionManager:
             self.fail_count += 1
 
         else:
-            self.console.success(audio_file, output.output_file, perf_counter() - start_time)
-            self.output_files.append(output.output_file)
+            written_files = [file for file in (output.transcript_file, output.notes_file) if file]
+            self.console.success(audio_file, written_files[0], perf_counter() - start_time)
+            self.output_files.extend(written_files)
             self.success_count += 1
+
+            if len(written_files) > 1:
+                self.console.notes(written_files[1])
+
+            if output.notes_error:
+                self.console.notes_failure(output.notes_error)
 
             if output.gap_count:
                 self.console.gaps(output.gap_count, output.gap_count * self.settings.segment_length_seconds)
@@ -451,6 +686,12 @@ class TranscriptionManager:
         if not self.settings.is_configured:
             detail = f'Expected a .env file beside the script: {SCRIPT_DIRECTORY}'
             self.console.error('No API settings were found.', detail)
+
+            return 1
+
+        if self.settings.output_mode not in OUTPUT_MODES:
+            detail = f'MIMIR_OUTPUT_MODE must be one of: {OUTPUT_MODES}'
+            self.console.error(f'Unknown output mode: {self.settings.output_mode}', detail)
 
             return 1
 

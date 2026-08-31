@@ -33,16 +33,27 @@ from the .env file described under FIRST TIME SETUP.
 2. Drag your audio file (or a whole folder of them) on top of the
    Mimir shortcut and let go.
 
-3. A black window opens and lists what it is about to transcribe.
-   Press S to start, Q to quit, or M to manage the right-click menu.
+3. A black window opens and lists what it is about to transcribe,
+   and asks what you want out of it:
+
+       S   the plain transcript, word for word
+       N   one notes file: summary, action items, and a tidied-up
+           transcript
+       B   both files
+
+       M   adds or removes "Transcribe with Mimir" in the Windows
+           right-click menu, then returns to this list. Nothing is
+           transcribed. See THE RIGHT-CLICK MENU below.
+       Q   closes the window. Nothing is transcribed and your files
+           are left alone.
 
 4. Wait. A percentage counts up for each file. A one hour recording
    usually takes a couple of minutes.
 
-5. When it finishes you can press T to open a transcript, O to open
-   the folder it was saved in, R to transcribe something else, or Q
-   to close. If there is more than one transcript, T lists them and
-   asks which one to open.
+5. When it finishes you can press T to open a file, O to open the
+   folder it was saved in, R to transcribe something else, or Q to
+   close. If more than one file was written, T lists them and asks
+   which one to open.
 
 You can also just double-click the Mimir shortcut and type or paste
 a file path when it asks.
@@ -72,6 +83,24 @@ exists, the new one gets a number:
 
 Each sentence is put on its own line so the text is easy to skim and
 easy to search.
+
+Press N or B and a notes file is written too, with "_notes.txt" on
+the end:
+
+    meeting notes.mp3   ->   meeting_notes_notes.txt
+
+The notes file holds a short summary, a list of action items, and a
+tidied-up copy of the transcript with punctuation and paragraphs. It
+costs one extra pass over the text, so it finishes a little later.
+
+    S   meeting_notes_transcript.txt
+    N   meeting_notes_notes.txt
+    B   both of the above
+
+The plain transcript is always written first, and the extra pass
+never changes it. On N it is deleted once the notes file is safely
+written; if the notes pass fails, the transcript is kept and Mimir
+says so, so a recording is never lost.
 
 
 --------------------------------------------------------------------
@@ -131,6 +160,9 @@ THE ONE THING SETUP CANNOT DO
         AI_API_KEY=your-key-here
         AI_API_HOST=https://your-service-address
         LLM_AUDIO_MODEL=stratus.listen
+        LLM_TEXT_MODEL=stratus.thinking
+
+    LLM_TEXT_MODEL is only used when you press N for notes.
 
     Setup will tell you if it is missing, but it cannot invent one.
     Do not share that file and do not put it on the internet. It is

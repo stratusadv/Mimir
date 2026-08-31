@@ -98,14 +98,28 @@ cls
 call :draw_header
 call :draw_files
 echo.
+echo    !C_MUTED![S] the plain transcript, word for word.!C_RESET!
+echo    !C_MUTED![N] one notes file: summary, action items, tidied-up transcript.!C_RESET!
+echo    !C_MUTED![B] both files.!C_RESET!
+echo    !C_MUTED!N and B take one extra AI pass, so they cost a little more and!C_RESET!
+echo    !C_MUTED!finish a little later.!C_RESET!
+echo    !C_MUTED![M] adds or removes "Transcribe with Mimir" in the Windows!C_RESET!
+echo    !C_MUTED!right-click menu, then comes back here. Nothing is transcribed.!C_RESET!
+echo    !C_MUTED![Q] closes this window. Nothing is transcribed and your files!C_RESET!
+echo    !C_MUTED!are left alone.!C_RESET!
+echo.
 
-choice /c SMQ /n /m "   [S] Start transcribing   [M] Right-click menu   [Q] Quit: "
+choice /c SNBMQ /n /m "   [S] Transcript   [N] Notes   [B] Both   [M] Right-click menu   [Q] Quit: "
 set "picked=!errorlevel!"
-if !picked!==3 goto :terminate
-if !picked!==2 (
+if !picked!==5 goto :terminate
+if !picked!==4 (
     call "%SETUP_FILE%" /menu
     goto :menu
 )
+
+set "MIMIR_OUTPUT_MODE=transcript"
+if !picked!==2 set "MIMIR_OUTPUT_MODE=notes"
+if !picked!==3 set "MIMIR_OUTPUT_MODE=both"
 
 if exist "%LIST_FILE%" del /q "%LIST_FILE%" >nul 2>nul
 for /l %%i in (1,1,!file_count!) do >>"%LIST_FILE%" echo !input_%%i!
@@ -113,6 +127,7 @@ for /l %%i in (1,1,!file_count!) do >>"%LIST_FILE%" echo !input_%%i!
 cls
 call :draw_header
 echo    !C_ACCENT!Transcribing !file_count!. This can take a few minutes.!C_RESET!
+if not "!MIMIR_OUTPUT_MODE!"=="transcript" echo    !C_MUTED!Notes are on; the extra pass runs after each transcript.!C_RESET!
 echo.
 
 set "MIMIR_RESULT_FILE=%RESULT_FILE%"
@@ -131,7 +146,7 @@ if !result_count!==0 (
     goto :menu
 )
 
-choice /c TORQ /n /m "   [T] open transcript   [O] open folder   [R] transcribe again   [Q] quit: "
+choice /c TORQ /n /m "   [T] open result   [O] open folder   [R] transcribe again   [Q] quit: "
 set "finish_picked=!errorlevel!"
 if !finish_picked!==4 goto :terminate
 if !finish_picked!==3 goto :menu
@@ -160,7 +175,7 @@ if !result_count!==1 (
 :open_transcript_prompt
 cls
 call :draw_header
-echo    !C_WHITE!Transcripts: !result_count!!C_RESET!
+echo    !C_WHITE!Files: !result_count!!C_RESET!
 for /l %%i in (1,1,!result_count!) do call :draw_result_row %%i
 echo.
 set "pick="

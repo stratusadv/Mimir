@@ -80,7 +80,10 @@ if not !file_count!==0 goto :menu
 cls
 call :draw_header
 echo    !C_WARN!No audio files were dropped onto this script.!C_RESET!
-echo    !C_MUTED!Drop audio files or a folder next time, or type a path below.!C_RESET!
+echo.
+echo    !C_MUTED!Type or paste the path of an audio file, or a folder of them.!C_RESET!
+echo    !C_MUTED!Leave it blank to close this window. Next time you can drop!C_RESET!
+echo    !C_MUTED!files or a folder onto Mimir instead.!C_RESET!
 echo.
 set "manual_path="
 set /p "manual_path=   Path (blank to quit): "
@@ -98,13 +101,16 @@ cls
 call :draw_header
 call :draw_files
 echo.
-echo    !C_MUTED![S] the plain transcript, word for word.!C_RESET!
-echo    !C_MUTED![N] one notes file: summary, action items, tidied-up transcript.!C_RESET!
-echo    !C_MUTED![B] both files.!C_RESET!
+echo    !C_MUTED![S] writes a word-for-word transcript beside the audio (_transcript.txt).!C_RESET!
+echo    !C_MUTED![N] writes one notes file beside the audio (_notes.txt): a short!C_RESET!
+echo    !C_MUTED!summary, action items, and a tidied-up transcript. The raw!C_RESET!
+echo    !C_MUTED!transcript is not kept.!C_RESET!
+echo    !C_MUTED![B] writes both files: the word-for-word transcript and the notes.!C_RESET!
 echo    !C_MUTED!N and B take one extra AI pass, so they cost a little more and!C_RESET!
 echo    !C_MUTED!finish a little later.!C_RESET!
-echo    !C_MUTED![M] adds or removes "Transcribe with Mimir" in the Windows!C_RESET!
-echo    !C_MUTED!right-click menu, then comes back here. Nothing is transcribed.!C_RESET!
+echo    !C_MUTED![M] adds or removes Mimir in the Windows right-click menu!C_RESET!
+echo    !C_MUTED!("Transcribe with Mimir" on audio, "Search with Mimir" on!C_RESET!
+echo    !C_MUTED!.txt / .docx / .md), then comes back here. Nothing is transcribed.!C_RESET!
 echo    !C_MUTED![Q] closes this window. Nothing is transcribed and your files!C_RESET!
 echo    !C_MUTED!are left alone.!C_RESET!
 echo.
@@ -120,6 +126,19 @@ if !picked!==4 (
 set "MIMIR_OUTPUT_MODE=transcript"
 if !picked!==2 set "MIMIR_OUTPUT_MODE=notes"
 if !picked!==3 set "MIMIR_OUTPUT_MODE=both"
+set "MIMIR_SEARCH_QUERY="
+
+if not "!MIMIR_OUTPUT_MODE!"=="transcript" (
+    echo.
+    echo    !C_MUTED!After notes are written, Mimir can search them and add!C_RESET!
+    echo    !C_MUTED!highlights to the summary. Type what you want to find, in!C_RESET!
+    echo    !C_MUTED!plain language, or leave blank to skip.!C_RESET!
+    echo.
+    set "search_query="
+    set /p "search_query=   Search notes for (blank to skip): "
+    set "search_query=!search_query:"=!"
+    set "MIMIR_SEARCH_QUERY=!search_query!"
+)
 
 if exist "%LIST_FILE%" del /q "%LIST_FILE%" >nul 2>nul
 for /l %%i in (1,1,!file_count!) do >>"%LIST_FILE%" echo !input_%%i!
@@ -128,6 +147,7 @@ cls
 call :draw_header
 echo    !C_ACCENT!Transcribing !file_count!. This can take a few minutes.!C_RESET!
 if not "!MIMIR_OUTPUT_MODE!"=="transcript" echo    !C_MUTED!Notes are on; the extra pass runs after each transcript.!C_RESET!
+if not "!MIMIR_SEARCH_QUERY!"=="" echo    !C_MUTED!Search highlights will be added to the notes summary.!C_RESET!
 echo.
 
 set "MIMIR_RESULT_FILE=%RESULT_FILE%"
@@ -141,12 +161,25 @@ call :draw_ai_warning
 
 :finish_menu
 if !result_count!==0 (
-    choice /c RQ /n /m "   [R] transcribe again   [Q] quit: "
+    echo    !C_MUTED![R] goes back to the output menu so you can try these files!C_RESET!
+    echo    !C_MUTED!again.!C_RESET!
+    echo    !C_MUTED![Q] closes this window.!C_RESET!
+    echo.
+    choice /c RQ /n /m "   [R] Transcribe again   [Q] Quit: "
     if errorlevel 2 goto :terminate
     goto :menu
 )
 
-choice /c TORQ /n /m "   [T] open result   [O] open folder   [R] transcribe again   [Q] quit: "
+echo    !C_MUTED![T] opens the text that was just written. If more than one file!C_RESET!
+echo    !C_MUTED!was written, you pick which. Then this window closes.!C_RESET!
+echo    !C_MUTED![O] opens the folder the text was saved in, with the first file!C_RESET!
+echo    !C_MUTED!selected. Then this window closes.!C_RESET!
+echo    !C_MUTED![R] goes back to the output menu so you can transcribe these!C_RESET!
+echo    !C_MUTED!same files again, with a different choice if you want.!C_RESET!
+echo    !C_MUTED![Q] closes this window.!C_RESET!
+echo.
+
+choice /c TORQ /n /m "   [T] Open result   [O] Open folder   [R] Transcribe again   [Q] Quit: "
 set "finish_picked=!errorlevel!"
 if !finish_picked!==4 goto :terminate
 if !finish_picked!==3 goto :menu
@@ -154,8 +187,12 @@ if !finish_picked!==2 (
     start "" explorer.exe /select,"!result_1!"
     goto :terminate
 )
+set "transcript_opened=0"
 call :open_transcript
-goto :terminate
+if !transcript_opened!==1 goto :terminate
+cls
+call :draw_header
+goto :finish_menu
 
 :load_results
 set "result_count=0"
@@ -169,6 +206,7 @@ goto :eof
 :open_transcript
 if !result_count!==1 (
     start "" "!result_1!"
+    set "transcript_opened=1"
     goto :eof
 )
 
@@ -177,6 +215,9 @@ cls
 call :draw_header
 echo    !C_WHITE!Files: !result_count!!C_RESET!
 for /l %%i in (1,1,!result_count!) do call :draw_result_row %%i
+echo.
+echo    !C_MUTED!Type the number of the file to open in your default editor.!C_RESET!
+echo    !C_MUTED!Then this window closes. Leave it blank to go back.!C_RESET!
 echo.
 set "pick="
 set /p "pick=   Number to open (blank to go back): "
@@ -187,6 +228,7 @@ if errorlevel 1 goto :open_transcript_retry
 if !pick! gtr !result_count! goto :open_transcript_retry
 call set "open_target=%%result_!pick!%%"
 start "" "!open_target!"
+set "transcript_opened=1"
 goto :eof
 
 :open_transcript_retry

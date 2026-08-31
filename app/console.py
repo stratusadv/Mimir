@@ -72,6 +72,65 @@ class Console:
             flush=True,
         )
 
+    def search_failure(self, error: Exception) -> None:
+        print(f'         {self.WARN}Search highlights could not be added; the notes are unchanged.{self.RESET}')
+        print(f'         {self.MUTED}{error}{self.RESET}')
+
+    def search_findings(self, output_text: str) -> None:
+        print()
+        print(f'   {self.MUTED}{self.RULE}{self.RESET}')
+
+        for line in output_text.splitlines():
+            print(f'   {line}')
+
+        print(f'   {self.MUTED}{self.RULE}{self.RESET}')
+        print()
+
+    def search_ok(self, source_file: Path, elapsed_seconds: float) -> None:
+        print(
+            f'{self.CLEAR_LINE}   {self.OK}[ OK ]{self.RESET} {source_file.name} '
+            f'{self.MUTED}{elapsed_seconds:.0f} seconds{self.RESET}'
+        )
+
+    def search_save_ask(self) -> bool:
+        print(f'   {self.MUTED}[Y] writes a .txt file beside the original. An existing{self.RESET}')
+        print(f'   {self.MUTED}search file is never overwritten; a number is added.{self.RESET}')
+        print(f'   {self.MUTED}[N] skips writing. The findings stay in this window only.{self.RESET}')
+        print()
+
+        save_attempts_max = 10
+
+        for _ in range(save_attempts_max):
+            try:
+                answer = input('   [Y] Write .txt   [N] Skip: ').strip().lower()
+
+            except EOFError:
+                return False
+
+            else:
+                if answer in ('y', 'yes'):
+                    return True
+
+                if answer in ('n', 'no'):
+                    return False
+
+        return False
+
+    def search_saved(self, output_file: Path) -> None:
+        print(f'         {self.MUTED}wrote{self.RESET} {self.OK}{output_file.name}{self.RESET}')
+
+    def search_skipped(self) -> None:
+        print(f'         {self.MUTED}not written to a file{self.RESET}')
+
+    def search_start(self, source_file: Path, query: str) -> None:
+        query_label = query if len(query) <= 60 else f'{query[:57]}...'
+
+        print(
+            f'{self.CLEAR_LINE}{self.MUTED}   [ .. ] searching {source_file.name} for: {query_label}{self.RESET}',
+            end='',
+            flush=True,
+        )
+
     def start(self, audio_file: Path) -> None:
         print(f'{self.MUTED}   [  0% ] {audio_file.name}{self.RESET}', end='', flush=True)
 
@@ -83,10 +142,18 @@ class Console:
 
         print(f'         {self.MUTED}{elapsed_seconds:.0f} seconds{self.RESET}')
 
-    def summary(self, success_count: int, fail_count: int, gap_file_count: int, gap_count: int) -> None:
+    def summary(
+            self,
+            success_count: int,
+            fail_count: int,
+            gap_file_count: int,
+            gap_count: int,
+            *,
+            success_label: str = 'transcribed',
+    ) -> None:
         print()
         print(f'   {self.MUTED}{self.RULE}{self.RESET}')
-        print(f'    {self.OK}{success_count} transcribed{self.RESET}   {self.FAIL}{fail_count} failed{self.RESET}')
+        print(f'    {self.OK}{success_count} {success_label}{self.RESET}   {self.FAIL}{fail_count} failed{self.RESET}')
 
         if gap_count:
             file_label = 'file' if gap_file_count == 1 else 'files'

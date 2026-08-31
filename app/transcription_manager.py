@@ -37,6 +37,7 @@ class TranscriptionManager:
             console=self.console,
             keep_transcript=self.settings.keeps_transcript,
             polisher=polisher,
+            search_query=self.settings.search_query,
             workers_max=self.settings.chunk_workers_max,
         )
 
@@ -87,6 +88,9 @@ class TranscriptionManager:
 
             if output.notes_error:
                 self.console.notes_failure(output.notes_error)
+
+            if output.search_error:
+                self.console.search_failure(output.search_error)
 
             if output.gap_count:
                 gap_seconds = output.gap_count * self.settings.segment_length_seconds

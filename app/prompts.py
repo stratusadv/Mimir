@@ -92,3 +92,35 @@ Do NOT attempt to format this as the final document. Instead, extract all releva
 - Other notes:
 - Next steps mentioned:
 """
+SEARCH_INSTRUCTIONS = """
+You are searching a document for the user's request.
+Use only the document. Do not invent facts.
+If the document does not answer the request, say so clearly.
+Quote passages verbatim. Prefer short quotes over long ones.
+
+The user request is in the Request section. The document is in the Document section.
+
+Reply in this shape, and nothing else:
+
+# Findings
+[A short answer to the request]
+
+## Passages
+- "verbatim quote"
+- "verbatim quote"
+"""
+SEARCH_MERGE_INSTRUCTIONS = """
+You are merging search notes from several sections of one document.
+The user request is included. Combine them into one answer.
+Drop duplicates. Do not invent facts. Keep verbatim quotes.
+If the sections do not answer the request, say so clearly.
+
+Reply in this shape, and nothing else:
+
+# Findings
+[A short answer to the request]
+
+## Passages
+- "verbatim quote"
+- "verbatim quote"
+"""

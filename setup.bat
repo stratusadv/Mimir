@@ -6,7 +6,7 @@
 :: missing, and offers to add Mimir to the Windows right-click menu.
 ::
 :: Double-click it to run a full check with a report at the end. transcribe.bat
-:: calls it as "setup.bat /quiet" before every transcription, which says
+:: and search.bat call it as "setup.bat /quiet" before they run, which says
 :: nothing at all when there is nothing to do, and "setup.bat /menu" to manage
 :: the right-click menu on its own.
 ::
@@ -40,7 +40,10 @@ set "MENU_LABEL=Transcribe with Mimir"
 set "MENU_ROOT=HKCU\Software\Classes"
 set "PYTHON_WANTED=>=3.11"
 set "RULE=--------------------------------------------------------------------"
+set "SEARCH_LABEL=Search with Mimir"
+set "SEARCH_LAUNCHER=%~dp0app\search.bat"
 set "SETTINGS_KEY=HKCU\Software\Mimir"
+set "TEXT_EXTENSIONS=.docx .md .txt"
 
 set "exit_code=0"
 set "quiet_mode=0"
@@ -111,7 +114,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-choice /c YN /n /m "   Install them now? [Y] yes   [N] quit: "
+echo    !C_MUTED![Y] installs them now. Windows may ask for permission.!C_RESET!
+echo    !C_MUTED![N] closes this window. Mimir cannot run until they are installed.!C_RESET!
+echo.
+
+choice /c YN /n /m "   [Y] Install   [N] Quit: "
 if errorlevel 2 exit /b 1
 
 echo.
@@ -211,10 +218,18 @@ goto :eof
 :ensure_menu_current
 reg query "%MENU_ROOT%\Directory\shell\Mimir" >nul 2>nul
 if errorlevel 1 goto :eof
+set "menu_stale=0"
 set "menu_command="
 for /f "tokens=2,*" %%a in ('reg query "%MENU_ROOT%\Directory\shell\Mimir\command" /ve 2^>nul ^| findstr /i REG_SZ') do set "menu_command=%%b"
 echo !menu_command! | find /i "%LAUNCHER%" >nul
-if not errorlevel 1 goto :eof
+if errorlevel 1 set "menu_stale=1"
+reg query "%MENU_ROOT%\SystemFileAssociations\.txt\shell\MimirSearch" >nul 2>nul
+if errorlevel 1 set "menu_stale=1"
+set "search_command="
+for /f "tokens=2,*" %%a in ('reg query "%MENU_ROOT%\SystemFileAssociations\.txt\shell\MimirSearch\command" /ve 2^>nul ^| findstr /i REG_SZ') do set "search_command=%%b"
+echo !search_command! | find /i "%SEARCH_LAUNCHER%" >nul
+if errorlevel 1 set "menu_stale=1"
+if !menu_stale!==0 goto :eof
 call :write_verbs
 goto :eof
 
@@ -224,6 +239,8 @@ for %%x in (%AUDIO_EXTENSIONS%) do call :add_verb "%MENU_ROOT%\SystemFileAssocia
 call :add_verb "%MENU_ROOT%\Directory\shell\Mimir" "!MENU_LABEL!" FILE
 call :add_verb "%MENU_ROOT%\Directory\Background\shell\Mimir" "!MENU_LABEL!" DIRECTORY
 call :add_verb "%MENU_ROOT%\DesktopBackground\Shell\Mimir" "Open Mimir" NONE
+
+for %%x in (%TEXT_EXTENSIONS%) do call :add_verb "%MENU_ROOT%\SystemFileAssociations\%%x\shell\MimirSearch" "!SEARCH_LABEL!" FILE "%SEARCH_LAUNCHER%"
 goto :eof
 
 :offer_context_menu
@@ -240,11 +257,19 @@ echo    !C_MUTED!You could then right-click an audio file, a folder, or empty!C_
 echo    !C_MUTED!space in any window, and pick "!MENU_LABEL!" straight!C_RESET!
 echo    !C_MUTED!away, instead of hunting for Mimir first.!C_RESET!
 echo.
+echo    !C_MUTED!A .txt, .docx, or .md file gets "!SEARCH_LABEL!" instead:!C_RESET!
+echo    !C_MUTED!type what you want to find, and Mimir looks it up with AI.!C_RESET!
+echo.
 echo    !C_MUTED!This changes your account only. Nothing extra is installed, and!C_RESET!
 echo    !C_MUTED!you can take it back off any time by running setup.bat again.!C_RESET!
 echo.
+echo    !C_MUTED![Y] adds "Transcribe with Mimir" on audio files and folders, and!C_RESET!
+echo    !C_MUTED!"Search with Mimir" on .txt, .docx, and .md files.!C_RESET!
+echo    !C_MUTED![N] skips this. You can add it later from this screen, or by!C_RESET!
+echo    !C_MUTED!pressing M in the transcribe window.!C_RESET!
+echo.
 
-choice /c YN /n /m "   Add it? [Y] yes   [N] no thanks: "
+choice /c YN /n /m "   [Y] Add it   [N] No thanks: "
 set "menu_answer=!errorlevel!"
 
 reg add "%SETTINGS_KEY%" /v ContextMenuAsked /t REG_SZ /d "1" /f >nul 2>nul
@@ -272,6 +297,8 @@ call :write_verbs
 
 echo    !C_OK![ OK ]!C_RESET! Right-click an audio file or a folder and look for
 echo           !C_WHITE!"!MENU_LABEL!"!C_RESET!.
+echo    !C_OK![ OK ]!C_RESET! Right-click a .txt, .docx, or .md file and look for
+echo           !C_WHITE!"!SEARCH_LABEL!"!C_RESET!.
 echo.
 
 call :is_compact_menu
@@ -291,6 +318,7 @@ echo    !C_ACCENT!Removing Mimir from the right-click menu...!C_RESET!
 echo.
 
 for %%x in (%AUDIO_EXTENSIONS%) do reg delete "%MENU_ROOT%\SystemFileAssociations\%%x\shell\Mimir" /f >nul 2>nul
+for %%x in (%TEXT_EXTENSIONS%) do reg delete "%MENU_ROOT%\SystemFileAssociations\%%x\shell\MimirSearch" /f >nul 2>nul
 
 reg delete "%MENU_ROOT%\Directory\shell\Mimir" /f >nul 2>nul
 reg delete "%MENU_ROOT%\Directory\Background\shell\Mimir" /f >nul 2>nul
@@ -310,12 +338,14 @@ pause
 goto :eof
 
 :add_verb
+set "verb_launcher=%LAUNCHER%"
+if not "%~4"=="" set "verb_launcher=%~4"
 reg add "%~1" /ve /t REG_SZ /d "%~2" /f >nul
 if exist "%ICON_FILE%" reg add "%~1" /v Icon /t REG_SZ /d "\"%ICON_FILE%\"" /f >nul
 if "%~3"=="FILE" reg add "%~1" /v MultiSelectModel /t REG_SZ /d "Player" /f >nul
-if "%~3"=="FILE" reg add "%~1\command" /ve /t REG_SZ /d "\"%LAUNCHER%\" \"%%1\"" /f >nul
-if "%~3"=="DIRECTORY" reg add "%~1\command" /ve /t REG_SZ /d "\"%LAUNCHER%\" \"%%V\"" /f >nul
-if "%~3"=="NONE" reg add "%~1\command" /ve /t REG_SZ /d "\"%LAUNCHER%\"" /f >nul
+if "%~3"=="FILE" reg add "%~1\command" /ve /t REG_SZ /d "\"!verb_launcher!\" \"%%1\"" /f >nul
+if "%~3"=="DIRECTORY" reg add "%~1\command" /ve /t REG_SZ /d "\"!verb_launcher!\" \"%%V\"" /f >nul
+if "%~3"=="NONE" reg add "%~1\command" /ve /t REG_SZ /d "\"!verb_launcher!\"" /f >nul
 goto :eof
 
 :is_compact_menu
@@ -343,8 +373,12 @@ echo      !C_MUTED!- The screen flickers once while Windows restarts the desktop
 echo      !C_MUTED!  and any open File Explorer windows will close.!C_RESET!
 echo      !C_MUTED!- Undo it any time by running setup.bat again.!C_RESET!
 echo.
+echo    !C_MUTED![Y] turns off the Windows 11 short menu so Mimir is on the first!C_RESET!
+echo    !C_MUTED!right-click. This changes every right-click, not only Mimir.!C_RESET!
+echo    !C_MUTED![N] leaves Windows as it is. Mimir stays under "Show more options".!C_RESET!
+echo.
 
-choice /c YN /n /m "   Go ahead? [Y] yes   [N] leave Windows alone: "
+choice /c YN /n /m "   [Y] Go ahead   [N] Leave Windows alone: "
 if errorlevel 2 (
     echo.
     echo    !C_MUTED!Left alone. Mimir stays under "Show more options", or press!C_RESET!
@@ -399,7 +433,7 @@ reg query "%MENU_ROOT%\Directory\shell\Mimir" >nul 2>nul
 if errorlevel 1 (
     echo      !C_MUTED![ -- ] Right-click menu  not added!C_RESET!
 ) else (
-    echo      !C_OK![ OK ]!C_RESET! Right-click menu  !C_MUTED!"!MENU_LABEL!"!C_RESET!
+    echo      !C_OK![ OK ]!C_RESET! Right-click menu  !C_MUTED!"!MENU_LABEL!" / "!SEARCH_LABEL!"!C_RESET!
 )
 
 echo.
@@ -422,13 +456,24 @@ reg query "%CLASSIC_MENU_KEY%\InprocServer32" >nul 2>nul
 if errorlevel 1 set "classic_on=0"
 
 if !menu_installed!==0 (
-    choice /c MQ /n /m "   [M] add Mimir to the right-click menu   [Q] done: "
+    echo    !C_MUTED![M] adds "Transcribe with Mimir" on audio files and folders, and!C_RESET!
+    echo    !C_MUTED!"Search with Mimir" on .txt, .docx, and .md files.!C_RESET!
+    echo    !C_MUTED![Q] closes this window. Setup is finished.!C_RESET!
+    echo.
+    choice /c MQ /n /m "   [M] Add right-click menu   [Q] Done: "
     if not errorlevel 2 call :install_context_menu
     goto :eof
 )
 
 if !classic_on!==1 (
-    choice /c MSQ /n /m "   [M] remove from right-click   [S] bring back the short Windows 11 menu   [Q] done: "
+    echo    !C_MUTED![M] takes Mimir off the right-click menu, including both!C_RESET!
+    echo    !C_MUTED!"Transcribe with Mimir" and "Search with Mimir".!C_RESET!
+    echo    !C_MUTED!Nothing else is changed.!C_RESET!
+    echo    !C_MUTED![S] puts the Windows 11 short right-click menu back. Mimir will!C_RESET!
+    echo    !C_MUTED!sit under "Show more options". The screen will flicker once.!C_RESET!
+    echo    !C_MUTED![Q] closes this window. Setup is finished.!C_RESET!
+    echo.
+    choice /c MSQ /n /m "   [M] Remove from right-click   [S] Short Windows 11 menu   [Q] Done: "
     set "report_choice=!errorlevel!"
     if !report_choice!==1 call :remove_context_menu
     if !report_choice!==2 call :disable_classic_menu
@@ -437,12 +482,24 @@ if !classic_on!==1 (
 
 call :is_compact_menu
 if errorlevel 1 (
-    choice /c MQ /n /m "   [M] remove Mimir from the right-click menu   [Q] done: "
+    echo    !C_MUTED![M] takes Mimir off the right-click menu, including both!C_RESET!
+    echo    !C_MUTED!"Transcribe with Mimir" and "Search with Mimir".!C_RESET!
+    echo    !C_MUTED!Nothing else is changed.!C_RESET!
+    echo    !C_MUTED![Q] closes this window. Setup is finished.!C_RESET!
+    echo.
+    choice /c MQ /n /m "   [M] Remove from right-click   [Q] Done: "
     if not errorlevel 2 call :remove_context_menu
     goto :eof
 )
 
-choice /c MFQ /n /m "   [M] remove from right-click   [F] show Mimir in the first menu   [Q] done: "
+echo    !C_MUTED![M] takes Mimir off the right-click menu, including both!C_RESET!
+echo    !C_MUTED!"Transcribe with Mimir" and "Search with Mimir".!C_RESET!
+echo    !C_MUTED!Nothing else is changed.!C_RESET!
+echo    !C_MUTED![F] turns off the Windows 11 short menu so Mimir appears on the!C_RESET!
+echo    !C_MUTED!first right-click. This changes every right-click, not only Mimir.!C_RESET!
+echo    !C_MUTED![Q] closes this window. Setup is finished.!C_RESET!
+echo.
+choice /c MFQ /n /m "   [M] Remove from right-click   [F] First menu   [Q] Done: "
 set "report_choice=!errorlevel!"
 if !report_choice!==1 call :remove_context_menu
 if !report_choice!==2 call :enable_classic_menu

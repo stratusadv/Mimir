@@ -27,6 +27,7 @@ class ChunkTranscriptions:
 class NotesOutput:
     error: Exception | None
     notes_file: Path | None
+    search_error: Exception | None
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class TranscriptionOutput:
     gap_count: int
     notes_error: Exception | None
     notes_file: Path | None
+    search_error: Exception | None
     transcript_file: Path | None
 
 
@@ -57,6 +59,7 @@ class TranscriptionSettings:
     chunk_workers_max: int
     output_mode: str
     result_file: Path | None
+    search_query: str
     segment_length_seconds: int
     text_model: str
 
@@ -77,6 +80,7 @@ class TranscriptionSettings:
             chunk_workers_max=CHUNK_WORKERS_MAX,
             output_mode=os.getenv('MIMIR_OUTPUT_MODE', OUTPUT_MODE_TRANSCRIPT).strip().lower(),
             result_file=Path(result_path_file) if result_path_file else None,
+            search_query=os.getenv('MIMIR_SEARCH_QUERY', '').strip(),
             segment_length_seconds=SEGMENT_LENGTH_SECONDS,
             text_model=os.getenv('LLM_TEXT_MODEL', 'stratus.thinking'),
         )

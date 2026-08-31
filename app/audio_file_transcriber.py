@@ -16,6 +16,7 @@ from data import (
     TranscriptionOutput,
     TranscriptionResult,
 )
+from document_searcher import DocumentSearcher
 from errors import TranscriptionError
 from thread_pool import ThreadPool
 from transcript_polisher import TranscriptPolisher
@@ -33,6 +34,7 @@ class AudioFileTranscriber:
             console: Console,
             keep_transcript: bool = True,
             polisher: TranscriptPolisher | None = None,
+            search_query: str = '',
             workers_max: int = CHUNK_WORKERS_MAX,
     ) -> None:
         self.chunker = chunker
@@ -40,10 +42,17 @@ class AudioFileTranscriber:
         self.console = console
         self.keep_transcript = keep_transcript
         self.polisher = polisher
+        self.search_query = search_query
         self.workers_max = workers_max
 
     @staticmethod
-    def format_notes(audio_file: Path, notes: TranscriptNotes) -> str:
+    def format_notes(
+            audio_file: Path,
+            notes: TranscriptNotes,
+            *,
+            search_query: str = '',
+            search_text: str = '',
+    ) -> str:
         sections = [
             'MIMIR NOTES',
             audio_file.name,
@@ -51,12 +60,29 @@ class AudioFileTranscriber:
             'AI wrote these notes from the transcript. Check them before you rely on them.',
             '',
             notes.summary_text,
+        ]
+
+        if search_text:
+            highlight_sections = [
+                '',
+                'SEARCH HIGHLIGHTS',
+                '',
+                f'Query: {search_query}',
+                '',
+                search_text,
+            ]
+
+            sections.extend(highlight_sections)
+
+        transcript_sections = [
             '',
             'CLEANED TRANSCRIPT',
             '',
             notes.cleaned_text,
             '',
         ]
+
+        sections.extend(transcript_sections)
 
         return '\n'.join(sections)
 
@@ -169,12 +195,13 @@ class AudioFileTranscriber:
             gap_count=result.gap_count,
             notes_error=notes_output.error,
             notes_file=notes_output.notes_file,
+            search_error=notes_output.search_error,
             transcript_file=kept_transcript_file,
         )
 
     def write_notes(self, audio_file: Path, transcript_text: str) -> NotesOutput:
         if self.polisher is None:
-            return NotesOutput(error=None, notes_file=None)
+            return NotesOutput(error=None, notes_file=None, search_error=None)
 
         self.console.notes_start(audio_file)
 
@@ -184,10 +211,41 @@ class AudioFileTranscriber:
         except Exception as error:
             log.exception('notes failed  file=%s', audio_file.name)
 
-            return NotesOutput(error=error, notes_file=None)
+            return NotesOutput(error=error, notes_file=None, search_error=None)
 
         else:
+            search_text, search_error = self.write_notes_search(audio_file, notes.cleaned_text)
             notes_file = self.free_output_file(audio_file, 'notes')
-            notes_file.write_text(self.format_notes(audio_file, notes), encoding='utf-8')
 
-            return NotesOutput(error=None, notes_file=notes_file)
+            notes_text = self.format_notes(
+                audio_file,
+                notes,
+                search_query=self.search_query,
+                search_text=search_text,
+            )
+
+            notes_file.write_text(notes_text, encoding='utf-8')
+
+            return NotesOutput(error=None, notes_file=notes_file, search_error=search_error)
+
+    def write_notes_search(self, audio_file: Path, transcript_text: str) -> tuple[str, Exception | None]:
+        if not self.search_query:
+            return '', None
+
+        polisher = self.polisher
+
+        if polisher is None:
+            return '', None
+
+        self.console.search_start(audio_file, self.search_query)
+
+        try:
+            findings = DocumentSearcher(polisher).search(transcript_text, self.search_query)
+
+        except Exception as error:
+            log.exception('search failed  file=%s', audio_file.name)
+
+            return '', error
+
+        else:
+            return findings, None

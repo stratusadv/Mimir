@@ -36,10 +36,16 @@ from the .env file described under FIRST TIME SETUP.
 3. A black window opens and lists what it is about to transcribe,
    and asks what you want out of it:
 
-       S   the plain transcript, word for word
-       N   one notes file: summary, action items, and a tidied-up
-           transcript
-       B   both files
+       S   writes a word-for-word transcript beside the audio
+           (_transcript.txt)
+       N   writes one notes file beside the audio (_notes.txt): a
+           short summary, action items, and a tidied-up transcript.
+           The raw transcript is not kept.
+       B   writes both files: the word-for-word transcript and the
+           notes
+
+       N and B take one extra AI pass, so they cost a little more
+       and finish a little later.
 
        M   adds or removes "Transcribe with Mimir" in the Windows
            right-click menu, then returns to this list. Nothing is
@@ -50,10 +56,15 @@ from the .env file described under FIRST TIME SETUP.
 4. Wait. A percentage counts up for each file. A one hour recording
    usually takes a couple of minutes.
 
-5. When it finishes you can press T to open a file, O to open the
-   folder it was saved in, R to transcribe something else, or Q to
-   close. If more than one file was written, T lists them and asks
-   which one to open.
+5. When it finishes:
+
+       T   opens the text that was just written. If more than one
+           file was written, you pick which. Then the window closes.
+       O   opens the folder the text was saved in, with the first
+           file selected. Then the window closes.
+       R   goes back to the output list so you can transcribe these
+           same files again, with a different choice if you want.
+       Q   closes the window.
 
 You can also just double-click the Mimir shortcut and type or paste
 a file path when it asks.
@@ -64,7 +75,10 @@ it makes a new one.
 Better still, let Mimir add itself to your right-click menu the first
 time it runs - see THE RIGHT-CLICK MENU below. After that you can
 right-click any audio file, anywhere, and pick "Transcribe with
-Mimir" without opening this folder at all.
+Mimir" without opening this folder at all. A .txt, .docx, or .md
+file gets "Search with Mimir" instead: type what you want to find
+and Mimir looks it up with AI, shows the answer, then asks if you
+want it written to a .txt file.
 
 
 --------------------------------------------------------------------
@@ -93,6 +107,11 @@ The notes file holds a short summary, a list of action items, and a
 tidied-up copy of the transcript with punctuation and paragraphs. It
 costs one extra pass over the text, so it finishes a little later.
 
+After you pick N or B, Mimir asks what to search the notes for. Type
+a request in plain language, or leave it blank to skip. If you type
+something, a SEARCH HIGHLIGHTS section is added to the summary with
+the answer and quoted passages from the transcript.
+
     S   meeting_notes_transcript.txt
     N   meeting_notes_notes.txt
     B   both of the above
@@ -107,10 +126,23 @@ says so, so a recording is never lost.
  WHAT KINDS OF FILES WORK
 --------------------------------------------------------------------
 
+Transcribe:
+
     .flac   .m4a   .mp3   .mp4   .mpeg   .ogg   .wav   .webm
+
+Search:
+
+    .txt    .docx   .md
 
 Anything else in a dropped folder is ignored, and the window tells
 you how many files it skipped.
+
+A search shows the answer in the window first, then asks if you want
+a sibling .txt file. Press Y to write it, N to leave it on screen
+only. The original file is never changed. A search file is never
+overwritten; a number is added if that name is already taken:
+
+    meeting_notes_notes.txt   ->   meeting_notes_notes_search.txt
 
 
 --------------------------------------------------------------------
@@ -130,14 +162,14 @@ It checks everything, fixes what it can, and finishes with a report:
       [ OK ] uv                runs the transcriber
       [ OK ] Python            a private copy, kept by uv
       [ OK ] Settings file     holds the service address and key
-      [ OK ] Right-click menu  "Transcribe with Mimir"
+      [ OK ] Right-click menu  "Transcribe with Mimir" / "Search with Mimir"
 
 WHAT IT INSTALLS
     FFmpeg and uv are two small free programs, installed once per
     computer through the App Installer that comes with Windows. If
     either is missing Mimir lists it and asks:
 
-        Install them now? [Y] yes   [N] quit
+        [Y] Install   [N] Quit
 
     Press Y. Windows may pop up a box asking for permission - choose
     Yes. Very occasionally Windows needs the window closed and
@@ -162,7 +194,8 @@ THE ONE THING SETUP CANNOT DO
         LLM_AUDIO_MODEL=stratus.listen
         LLM_TEXT_MODEL=stratus.thinking
 
-    LLM_TEXT_MODEL is only used when you press N for notes.
+    LLM_TEXT_MODEL is used when you press N for notes, and when you
+    search a document.
 
     Setup will tell you if it is missing, but it cannot invent one.
     Do not share that file and do not put it on the internet. It is
@@ -179,7 +212,7 @@ have to go looking for the Mimir shortcut again.
 The first time you run it, Mimir asks:
 
     Add Mimir to your right-click menu?
-    Add it? [Y] yes   [N] no thanks
+    [Y] Add it   [N] No thanks
 
 Press Y and it sets itself up. It only asks once. To change your mind
 later, run setup.bat, or run transcribe.bat and press M at the main
@@ -193,6 +226,11 @@ Once it is on, you get "Transcribe with Mimir" when you right-click:
     empty space in a       opens Mimir for that folder
       folder window
     the desktop            opens Mimir and asks for a path
+
+A .txt, .docx, or .md file gets "Search with Mimir" instead. Type
+what you want to find; Mimir reads the file, looks that up with AI,
+and shows the answer in the window. Then it asks if you want a .txt
+file written beside the original. The original file is not changed.
 
 The Mimir logo appears beside the menu entry.
 

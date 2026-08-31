@@ -17,7 +17,8 @@ setlocal enabledelayedexpansion
 title Mimir Setup
 
 set "SCRIPT_DIR=%~dp0"
-set "TOOLS_DIR=%~dp0tools"
+set "APP_DIR=%~dp0app\"
+set "TOOLS_DIR=%~dp0app\tools"
 if exist "%TOOLS_DIR%\ffmpeg.exe" set "PATH=%TOOLS_DIR%;%PATH%"
 if exist "%TOOLS_DIR%\ffmpeg\bin\ffmpeg.exe" set "PATH=%TOOLS_DIR%\ffmpeg\bin;%PATH%"
 
@@ -33,8 +34,8 @@ set "C_WHITE=%ESC%[97m"
 
 set "AUDIO_EXTENSIONS=.flac .m4a .mp3 .mp4 .mpeg .ogg .wav .webm"
 set "CLASSIC_MENU_KEY=HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
-set "ICON_FILE=%~dp0assets\mimir.ico"
-set "LAUNCHER=%~dp0transcribe.bat"
+set "ICON_FILE=%~dp0app\assets\mimir.ico"
+set "LAUNCHER=%~dp0app\transcribe.bat"
 set "MENU_LABEL=Transcribe with Mimir"
 set "MENU_ROOT=HKCU\Software\Classes"
 set "PYTHON_WANTED=>=3.11"
@@ -64,6 +65,8 @@ if errorlevel 1 (
     goto :finish
 )
 
+call :ensure_shortcut
+call :ensure_menu_current
 call :offer_context_menu
 
 if !quiet_mode!==1 goto :finish
@@ -194,6 +197,35 @@ if exist "%TOOLS_DIR%\ffmpeg.exe" set "PATH=%TOOLS_DIR%;%PATH%"
 if exist "%TOOLS_DIR%\ffmpeg\bin\ffmpeg.exe" set "PATH=%TOOLS_DIR%\ffmpeg\bin;%PATH%"
 goto :eof
 
+:ensure_shortcut
+if not exist "%ICON_FILE%" goto :eof
+set "shortcut_file=%SCRIPT_DIR%Mimir.lnk"
+set "shortcut_folder=%SCRIPT_DIR:~0,-1%"
+set "stamped_target="
+for /f "tokens=2,*" %%a in ('reg query "%SETTINGS_KEY%" /v ShortcutTarget 2^>nul ^| findstr /i ShortcutTarget') do set "stamped_target=%%b"
+if exist "!shortcut_file!" if /i "!stamped_target!"=="%LAUNCHER%" goto :eof
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('!shortcut_file!'); $shortcut.TargetPath = '%LAUNCHER%'; $shortcut.WorkingDirectory = '!shortcut_folder!'; $shortcut.IconLocation = '%ICON_FILE%'; $shortcut.Description = 'Mimir - Audio Transcriber'; $shortcut.Save()" >nul 2>nul
+if exist "!shortcut_file!" reg add "%SETTINGS_KEY%" /v ShortcutTarget /t REG_SZ /d "%LAUNCHER%" /f >nul 2>nul
+goto :eof
+
+:ensure_menu_current
+reg query "%MENU_ROOT%\Directory\shell\Mimir" >nul 2>nul
+if errorlevel 1 goto :eof
+set "menu_command="
+for /f "tokens=2,*" %%a in ('reg query "%MENU_ROOT%\Directory\shell\Mimir\command" /ve 2^>nul ^| findstr /i REG_SZ') do set "menu_command=%%b"
+echo !menu_command! | find /i "%LAUNCHER%" >nul
+if not errorlevel 1 goto :eof
+call :write_verbs
+goto :eof
+
+:write_verbs
+for %%x in (%AUDIO_EXTENSIONS%) do call :add_verb "%MENU_ROOT%\SystemFileAssociations\%%x\shell\Mimir" "!MENU_LABEL!" FILE
+
+call :add_verb "%MENU_ROOT%\Directory\shell\Mimir" "!MENU_LABEL!" FILE
+call :add_verb "%MENU_ROOT%\Directory\Background\shell\Mimir" "!MENU_LABEL!" DIRECTORY
+call :add_verb "%MENU_ROOT%\DesktopBackground\Shell\Mimir" "Open Mimir" NONE
+goto :eof
+
 :offer_context_menu
 reg query "%MENU_ROOT%\Directory\shell\Mimir" >nul 2>nul
 if not errorlevel 1 goto :eof
@@ -236,11 +268,7 @@ call :draw_header
 echo    !C_ACCENT!Adding Mimir to the right-click menu...!C_RESET!
 echo.
 
-for %%x in (%AUDIO_EXTENSIONS%) do call :add_verb "%MENU_ROOT%\SystemFileAssociations\%%x\shell\Mimir" "!MENU_LABEL!" FILE
-
-call :add_verb "%MENU_ROOT%\Directory\shell\Mimir" "!MENU_LABEL!" FILE
-call :add_verb "%MENU_ROOT%\Directory\Background\shell\Mimir" "!MENU_LABEL!" DIRECTORY
-call :add_verb "%MENU_ROOT%\DesktopBackground\Shell\Mimir" "Open Mimir" NONE
+call :write_verbs
 
 echo    !C_OK![ OK ]!C_RESET! Right-click an audio file or a folder and look for
 echo           !C_WHITE!"!MENU_LABEL!"!C_RESET!.
@@ -361,7 +389,7 @@ call :draw_check ffmpeg "FFmpeg           " "reads the audio"
 call :draw_check uv "uv               " "runs the transcriber"
 call :draw_python_check
 
-if exist "%SCRIPT_DIR%.env" (
+if exist "%APP_DIR%.env" (
     echo      !C_OK![ OK ]!C_RESET! Settings file     !C_MUTED!holds the service address and key!C_RESET!
 ) else (
     echo      !C_FAIL![ NO ]!C_RESET! Settings file     !C_MUTED!missing .env - see README.txt!C_RESET!
@@ -378,7 +406,7 @@ echo.
 echo    !C_MUTED!!RULE!!C_RESET!
 echo.
 
-if not exist "%SCRIPT_DIR%.env" (
+if not exist "%APP_DIR%.env" (
     echo    !C_WARN!Mimir cannot transcribe until the .env file is in place.!C_RESET!
     echo    !C_MUTED!See FIRST TIME SETUP in README.txt.!C_RESET!
     echo.

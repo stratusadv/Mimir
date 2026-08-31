@@ -14,6 +14,7 @@ setlocal enabledelayedexpansion
 title Mimir - Audio Transcriber
 
 set "SCRIPT_DIR=%~dp0"
+set "SETUP_FILE=%~dp0..\setup.bat"
 set "TOOLS_DIR=%~dp0tools"
 if exist "%TOOLS_DIR%\ffmpeg.exe" set "PATH=%TOOLS_DIR%;%PATH%"
 if exist "%TOOLS_DIR%\ffmpeg\bin\ffmpeg.exe" set "PATH=%TOOLS_DIR%\ffmpeg\bin;%PATH%"
@@ -34,16 +35,16 @@ set "PREVIEW_LIMIT=12"
 set "RESULT_FILE=%TEMP%\mimir_result_%RANDOM%%RANDOM%.txt"
 set "RULE=--------------------------------------------------------------------"
 
-if not exist "%SCRIPT_DIR%setup.bat" (
+if not exist "%SETUP_FILE%" (
     echo.
-    echo    !C_FAIL![ERROR]!C_RESET! setup.bat is missing from this folder.
+    echo    !C_FAIL![ERROR]!C_RESET! setup.bat is missing from the Mimir folder.
     echo    !C_MUTED!Copy the whole Mimir folder, not just this file.!C_RESET!
     echo.
     pause
     goto :terminate
 )
 
-call "%SCRIPT_DIR%setup.bat" /quiet
+call "%SETUP_FILE%" /quiet
 if errorlevel 1 goto :terminate
 
 if not exist "%SCRIPT_DIR%.env" (
@@ -101,7 +102,7 @@ choice /c SMQ /n /m "   [S] Start transcribing   [M] Right-click menu   [Q] Quit
 set "picked=!errorlevel!"
 if !picked!==3 goto :terminate
 if !picked!==2 (
-    call "%SCRIPT_DIR%setup.bat" /menu
+    call "%SETUP_FILE%" /menu
     goto :menu
 )
 

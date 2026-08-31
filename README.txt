@@ -10,23 +10,27 @@ a plain text transcript appears right next to that file.
  WHAT IS IN THIS FOLDER
 --------------------------------------------------------------------
 
-    transcribe.bat    the one you use. Drop audio on it.
+    Mimir             the one you use. Drop audio on it, or
+                      double-click it. It is a shortcut with the
+                      Mimir logo, made by setup.bat.
     setup.bat         gets the computer ready. Run it once, or never
-                      - transcribe.bat runs it for you.
+                      - Mimir runs it for you.
     README.txt        this file.
-    assets            the Mimir logo, used for the right-click menu.
+    app               the machinery, and the .env settings file.
 
-Anything else in here is machinery. Leave it alone.
+Everything inside "app" looks after itself. Leave it alone, apart
+from the .env file described under FIRST TIME SETUP.
 
 
 --------------------------------------------------------------------
  HOW TO USE IT
 --------------------------------------------------------------------
 
-1. Find the file called "transcribe.bat" in this folder.
+1. Find "Mimir" in this folder - the shortcut with the Mimir
+   logo on it.
 
-2. Drag your audio file (or a whole folder of them) on top of
-   "transcribe.bat" and let go.
+2. Drag your audio file (or a whole folder of them) on top of the
+   Mimir shortcut and let go.
 
 3. A black window opens and lists what it is about to transcribe.
    Press S to start, Q to quit, or M to manage the right-click menu.
@@ -37,8 +41,11 @@ Anything else in here is machinery. Leave it alone.
 5. When it finishes you can press O to open the folder with your new
    transcript in it, R to transcribe something else, or Q to close.
 
-You can also just double-click "transcribe.bat" and type or paste a
-file path when it asks.
+You can also just double-click the Mimir shortcut and type or paste
+a file path when it asks.
+
+If the Mimir shortcut is not there, double-click "setup.bat" once and
+it makes a new one.
 
 Better still, let Mimir add itself to your right-click menu the first
 time it runs - see THE RIGHT-CLICK MENU below. After that you can
@@ -79,8 +86,8 @@ you how many files it skipped.
 --------------------------------------------------------------------
 
 There is nothing to install by hand, and nothing you have to run
-first. Every time transcribe.bat starts it quietly checks the
-computer, and only speaks up if something is missing.
+first. Every time Mimir starts it quietly checks the computer, and
+only speaks up if something is missing.
 
 If you would rather see the whole picture, double-click "setup.bat".
 It checks everything, fixes what it can, and finishes with a report:
@@ -110,8 +117,9 @@ WHAT IT INSTALLS
     private copy that belongs to Mimir alone.
 
 THE ONE THING SETUP CANNOT DO
-    There must be a file called ".env" sitting in this folder. It
-    holds the address and key for the transcription service:
+    There must be a file called ".env" sitting inside the "app"
+    folder. It holds the address and key for the transcription
+    service:
 
         AI_API_KEY=your-key-here
         AI_API_HOST=https://your-service-address
@@ -127,7 +135,7 @@ THE ONE THING SETUP CANNOT DO
 --------------------------------------------------------------------
 
 Mimir can put itself into the Windows right-click menu, so you never
-have to go looking for transcribe.bat again.
+have to go looking for the Mimir shortcut again.
 
 The first time you run it, Mimir asks:
 
@@ -191,7 +199,8 @@ IF YOU MOVE THE MIMIR FOLDER
     The menu entry remembers where the folder was. After moving it,
     run setup.bat from its new home and press M twice - once to
     remove the old entry, once to add it back pointing at the new
-    location.
+    location. Running setup.bat also repairs the Mimir shortcut,
+    which remembers the old place in the same way.
 
 
 --------------------------------------------------------------------
@@ -210,16 +219,20 @@ IF YOU MOVE THE MIMIR FOLDER
     Mimir could not download its private copy of Python. Almost
     always a blocked or missing internet connection.
 
-"setup.bat is missing from this folder"
+"setup.bat is missing from the Mimir folder"
     Only part of Mimir was copied. Copy the whole folder.
+
+The Mimir shortcut is gone, or says it cannot find what it points to
+    Double-click setup.bat. It makes the shortcut again, pointing at
+    wherever the folder now lives.
 
 The right-click entry is missing, or does nothing
     The Mimir folder was probably moved or renamed. Run setup.bat and
     press M twice to point it at the new place.
 
 "Missing settings file"
-    The .env file is not in this folder. Copy the whole Mimir folder,
-    not just transcribe.bat.
+    The .env file is not in the "app" folder. Copy the whole Mimir
+    folder, not just the shortcut.
 
 "No API settings were found"
     The .env file is there but a line is blank or misspelled.
@@ -238,9 +251,10 @@ bottom counts how many worked and how many did not.
  MOVING IT TO ANOTHER COMPUTER
 --------------------------------------------------------------------
 
-Copy the whole folder. Run setup.bat once on the new machine, or just
-use transcribe.bat and let it sort itself out.
+Copy the whole folder. Run setup.bat once on the new machine - that
+also makes the Mimir shortcut there - or just use Mimir and let it
+sort itself out.
 
 If you would rather not install FFmpeg on every machine, put
-"ffmpeg.exe" in a folder named "tools" beside "transcribe.bat" and
+"ffmpeg.exe" in a folder named "tools" inside the "app" folder, and
 Mimir will use that copy instead, without asking to install anything.

@@ -1,1 +1,5 @@
 *.env
+__pycache__/
+Mimir.lnk
+app/tools/
+mimir.log

@@ -34,10 +34,7 @@ set "PREVIEW_LIMIT=12"
 set "RESULT_FILE=%TEMP%\mimir_result_%RANDOM%%RANDOM%.txt"
 set "RULE=--------------------------------------------------------------------"
 
-call :require_tool ffmpeg "ffmpeg" "winget install ffmpeg"
-if errorlevel 1 goto :terminate
-
-call :require_tool uv "uv" "winget install astral-sh.uv"
+call :ensure_dependencies
 if errorlevel 1 goto :terminate
 
 if not exist "%SCRIPT_DIR%.env" (
@@ -103,7 +100,7 @@ echo    !C_ACCENT!Transcribing !file_count!. This can take a few minutes.!C_RESE
 echo.
 
 set "MIMIR_RESULT_FILE=%RESULT_FILE%"
-uv run --quiet "%SCRIPT_DIR%audio_transcription.py" "%LIST_FILE%"
+uv run --script "%SCRIPT_DIR%audio_transcription.py" "%LIST_FILE%"
 
 del /q "%LIST_FILE%" >nul 2>nul
 echo.
@@ -162,20 +159,98 @@ echo    !C_ACCENT!!RULE!!C_RESET!
 echo.
 goto :eof
 
-:require_tool
+:check_tool
 where %~1 >nul 2>nul
 if not errorlevel 1 goto :eof
+set /a missing_count+=1
+set "missing_command_!missing_count!=%~1"
+set "missing_id_!missing_count!=%~2"
+set "missing_name_!missing_count!=%~3"
+set "missing_note_!missing_count!=%~4"
+goto :eof
+
+:ensure_dependencies
+set "missing_count=0"
+call :check_tool ffmpeg "Gyan.FFmpeg" "FFmpeg" "reads the audio"
+call :check_tool uv "astral-sh.uv" "uv" "runs the transcriber"
+if !missing_count!==0 exit /b 0
+
 cls
+call :draw_header
+set "plural=programs"
+if !missing_count!==1 set "plural=program"
+echo    !C_WARN!Mimir needs !missing_count! more free !plural! before it can run:!C_RESET!
 echo.
-echo    !C_FAIL![ERROR]!C_RESET! Could not find %~2.
+for /l %%m in (1,1,!missing_count!) do echo      !C_ACCENT!-!C_RESET! !missing_name_%%m!   !C_MUTED!!missing_note_%%m!!C_RESET!
 echo.
-echo    !C_MUTED!Install it by opening a terminal and running:!C_RESET!
-echo      %~3
+echo    !C_MUTED!These are installed once per computer, and Mimir can do it now.!C_RESET!
 echo.
-echo    !C_MUTED!Then close the terminal, reopen it, and try again.!C_RESET!
+
+where winget >nul 2>nul
+if errorlevel 1 (
+    echo    !C_FAIL![ERROR]!C_RESET! This computer is missing the Windows App Installer,
+    echo    !C_MUTED!so Mimir cannot install anything for you.!C_RESET!
+    echo.
+    echo    !C_MUTED!Get "App Installer" from the Microsoft Store, then run this again.!C_RESET!
+    echo.
+    pause
+    exit /b 1
+)
+
+choice /c YN /n /m "   Install them now? [Y] yes   [N] quit: "
+if errorlevel 2 exit /b 1
+
 echo.
-pause
-exit /b 1
+echo    !C_MUTED!!RULE!!C_RESET!
+echo    !C_MUTED!Windows may ask for permission. Choose Yes.!C_RESET!
+echo.
+
+for /l %%m in (1,1,!missing_count!) do call :install_one %%m
+
+call :refresh_path
+
+set "still_missing=0"
+for /l %%m in (1,1,!missing_count!) do (
+    where !missing_command_%%m! >nul 2>nul
+    if errorlevel 1 set /a still_missing+=1
+)
+
+if !still_missing! gtr 0 (
+    echo    !C_WARN!Almost there.!C_RESET!
+    echo    !C_MUTED!Close this window, then run transcribe.bat again so Windows can!C_RESET!
+    echo    !C_MUTED!pick up what was just installed.!C_RESET!
+    echo.
+    pause
+    exit /b 1
+)
+
+echo    !C_OK!Everything is ready.!C_RESET!
+echo.
+timeout /t 2 /nobreak >nul 2>nul
+exit /b 0
+
+:install_one
+echo    !C_ACCENT!Installing !missing_name_%~1! ...!C_RESET!
+winget install --id !missing_id_%~1! --exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity
+if errorlevel 1 (
+    echo.
+    echo    !C_FAIL![FAIL]!C_RESET! !missing_name_%~1! did not install.
+) else (
+    echo.
+    echo    !C_OK![ OK ]!C_RESET! !missing_name_%~1! installed.
+)
+echo.
+goto :eof
+
+:refresh_path
+set "machine_path="
+set "user_path="
+for /f "usebackq tokens=2,*" %%a in (`reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul ^| findstr /i /r /c:"REG_[A-Z_]*SZ"`) do set "machine_path=%%b"
+for /f "usebackq tokens=2,*" %%a in (`reg query "HKCU\Environment" /v Path 2^>nul ^| findstr /i /r /c:"REG_[A-Z_]*SZ"`) do set "user_path=%%b"
+if defined machine_path call set "PATH=%%machine_path%%;%%user_path%%"
+if exist "%TOOLS_DIR%\ffmpeg.exe" set "PATH=%TOOLS_DIR%;%PATH%"
+if exist "%TOOLS_DIR%\ffmpeg\bin\ffmpeg.exe" set "PATH=%TOOLS_DIR%\ffmpeg\bin;%PATH%"
+goto :eof
 
 :terminate
 del /q "%LIST_FILE%" >nul 2>nul

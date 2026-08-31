@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "openai",
+#     "python-dotenv",
+# ]
+# ///
+
 import ctypes
 import os
 import re
@@ -72,7 +80,7 @@ def chunk_audio_file(
         raise Exception(f'ffmpeg could not read this file. {detail}'.strip())
 
     except FileNotFoundError:
-        raise Exception('ffmpeg not found. Install ffmpeg with: winget install ffmpeg')
+        raise Exception('ffmpeg was not found. Close this window and run transcribe.bat again.')
 
 
 def transcribe_audio_chunk(audio_chunk_file: Path) -> str:

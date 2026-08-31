@@ -60,16 +60,25 @@ you how many files it skipped.
  FIRST TIME SETUP
 --------------------------------------------------------------------
 
-Two free programs need to be on the computer. The window will tell
-you if either one is missing, and it will tell you the exact command
-to run.
+There is nothing to install by hand.
 
-    ffmpeg    reads the audio      winget install ffmpeg
-    uv        runs the program     winget install astral-sh.uv
+The first time you run Mimir on a computer it checks for the two free
+programs it depends on:
 
-To install one: click Start, type "terminal", press Enter, paste the
-command, press Enter. Close the terminal when it finishes, then try
-"transcribe.bat" again.
+    FFmpeg    reads the audio
+    uv        runs the transcriber
+
+If either one is missing, Mimir lists it and asks:
+
+    Install them now? [Y] yes   [N] quit
+
+Press Y. Mimir installs them for you, and Windows may pop up a box
+asking for permission - choose Yes. When it finishes, Mimir carries
+straight on to the transcribing screen.
+
+Very occasionally Windows needs the window closed and reopened before
+it notices the new programs. Mimir will say so if that happens. Just
+run transcribe.bat again.
 
 There must also be a file called ".env" sitting in this folder. It
 holds the address and key for the transcription service:
@@ -78,17 +87,21 @@ holds the address and key for the transcription service:
     AI_API_HOST=https://your-service-address
     LLM_AUDIO_MODEL=stratus.listen
 
-Do not share that file, and do not put it on the internet. It is the
-key to the account.
+That one Mimir cannot create for you. Do not share it, and do not put
+it on the internet. It is the key to the account.
 
 
 --------------------------------------------------------------------
  IF SOMETHING GOES WRONG
 --------------------------------------------------------------------
 
-"Could not find ffmpeg" or "Could not find uv"
-    One of the two programs above is not installed yet, or the
-    terminal was not restarted after installing it.
+"FFmpeg did not install" or "uv did not install"
+    The install was cancelled, or the computer has no internet. Try
+    running transcribe.bat again.
+
+"This computer is missing the Windows App Installer"
+    Mimir cannot install anything without it. Open the Microsoft
+    Store, search for "App Installer", install it, and try again.
 
 "Missing settings file"
     The .env file is not in this folder. Copy the whole Mimir folder,
@@ -111,9 +124,9 @@ bottom counts how many worked and how many did not.
  MOVING IT TO ANOTHER COMPUTER
 --------------------------------------------------------------------
 
-Copy the whole folder. Everything it needs is inside, apart from
-ffmpeg and uv, which each machine installs once.
+Copy the whole folder. The first run on the new computer offers to
+install FFmpeg and uv, so there is nothing else to prepare.
 
-If you would rather not install ffmpeg on every machine, put
+If you would rather not install FFmpeg on every machine, put
 "ffmpeg.exe" in a folder named "tools" beside "transcribe.bat" and
-the script will find it there instead.
+Mimir will use that copy instead, without asking to install anything.

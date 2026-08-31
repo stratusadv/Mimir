@@ -9,10 +9,12 @@
 from __future__ import annotations
 
 import ctypes
+import io
 import logging
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -87,6 +89,23 @@ class TranscriptionError(Exception):
     pass
 
 
+class ThreadPool:
+    def __init__(self, workers_max: int) -> None:
+        self.executor = ThreadPoolExecutor(max_workers=workers_max)
+
+    def __enter__(self) -> ThreadPoolExecutor:
+        return self.executor
+
+    def __exit__(
+            self,
+            exception_type: type[BaseException] | None,
+            exception_value: BaseException | None,
+            traceback: TracebackType | None,
+    ) -> None:
+        wait = exception_type is None
+        self.executor.shutdown(wait=wait, cancel_futures=not wait)
+
+
 class Console:
     ACCENT = '\033[96m'
     CLEAR_LINE = '\033[2K\033[G'
@@ -132,6 +151,9 @@ class Console:
             f'         {self.WARN}{gap_count} {piece_label} could not be transcribed; '
             f'{gap_seconds} seconds marked [inaudible] in the transcript{self.RESET}'
         )
+
+    def interrupted(self) -> None:
+        print(f'{self.CLEAR_LINE}   {self.WARN}[STOP]{self.RESET} interrupted')
 
     def failure(self, audio_file: Path, error: Exception) -> None:
         print(f'{self.CLEAR_LINE}   {self.FAIL}[FAIL]{self.RESET} {audio_file.name}')
@@ -240,11 +262,7 @@ class AudioChunkSet:
         return len(self.chunk_files)
 
     def discard(self) -> None:
-        for chunk_file in self.chunk_files:
-            chunk_file.unlink(missing_ok=True)
-
-        if self.temp_directory.exists():
-            self.temp_directory.rmdir()
+        shutil.rmtree(self.temp_directory, ignore_errors=True)
 
 
 class AudioChunker:
@@ -276,11 +294,12 @@ class AudioChunker:
             str(output_pattern),
         ]
 
+        owned = False
+
         try:
             _ = subprocess.run(command, capture_output=True, text=True, check=True)
 
         except subprocess.CalledProcessError as error:
-            temp_directory.rmdir()
             stderr_text = error.stderr.strip() if error.stderr else ''
 
             if stderr_text:
@@ -291,14 +310,20 @@ class AudioChunker:
             raise TranscriptionError(message) from error
 
         except FileNotFoundError:
-            temp_directory.rmdir()
             message = 'ffmpeg was not found. Close this window and run transcribe.bat again.'
 
             raise TranscriptionError(message)
 
         else:
             chunk_files = sorted(temp_directory.glob(f'chunk_*.{audio_extension}'))
-            return AudioChunkSet(chunk_files, temp_directory)
+            chunk_set = AudioChunkSet(chunk_files, temp_directory)
+            owned = True
+
+            return chunk_set
+
+        finally:
+            if not owned:
+                shutil.rmtree(temp_directory, ignore_errors=True)
 
 
 class TranscriptionClient:
@@ -307,12 +332,14 @@ class TranscriptionClient:
         self.client = OpenAI(api_key=settings.api_key, base_url=settings.base_url)
 
     def request_chunk_transcription(self, audio_chunk_file: Path) -> str:
-        with open(audio_chunk_file, 'rb') as audio_file:
-            transcription = self.client.audio.transcriptions.create(
-                model=self.settings.audio_model,
-                file=audio_file,
-                timeout=60.0,
-            )
+        audio_buffer = io.BytesIO(audio_chunk_file.read_bytes())
+        audio_buffer.name = audio_chunk_file.name
+
+        transcription = self.client.audio.transcriptions.create(
+            model=self.settings.audio_model,
+            file=audio_buffer,
+            timeout=60.0,
+        )
 
         if hasattr(transcription, 'error') and transcription.error:
             message = f'API Error: {transcription.error.get("message", "Unknown error")}'
@@ -418,7 +445,7 @@ class TranscriptPolisher:
     def complete_many(self, instructions: str, contents: list[str]) -> list[str]:
         completion_texts: list[str] = [''] * len(contents)
 
-        with ThreadPoolExecutor(max_workers=POLISH_WORKERS_MAX) as thread_executor:
+        with ThreadPool(POLISH_WORKERS_MAX) as thread_executor:
             future_to_index = {
                 thread_executor.submit(self.complete, instructions, content): index
                 for index, content in enumerate(contents)
@@ -589,7 +616,7 @@ class AudioFileTranscriber:
         complete_count = 0
         gap_count = 0
 
-        with ThreadPoolExecutor(max_workers=self.workers_max) as thread_executor:
+        with ThreadPool(self.workers_max) as thread_executor:
             future_to_index = {
                 thread_executor.submit(self.client.transcribe_chunk, chunk_file): index
                 for index, chunk_file in enumerate(chunk_set.chunk_files)
@@ -829,7 +856,14 @@ def main() -> int:
         'set' if settings.api_key else 'missing',
     )
 
-    exit_code = manager.run()
+    try:
+        exit_code = manager.run()
+
+    except KeyboardInterrupt:
+        manager.console.interrupted()
+        log.warning('session interrupted')
+        logging.shutdown()
+        os._exit(130)
 
     log.info(
         'session end  transcribed=%s  failed=%s  gaps=%s',

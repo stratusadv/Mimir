@@ -7,7 +7,7 @@
 :: existing transcript is never overwritten: a numbered suffix is added.
 ::
 :: Everything it needs is checked and installed by setup.bat, which runs
-:: quietly before each transcription. See README.txt.
+:: quietly before each transcription. See README.md.
 ::
 setlocal enabledelayedexpansion
 
@@ -54,7 +54,7 @@ if not exist "%SCRIPT_DIR%.env" (
     echo.
     echo    !C_MUTED!A file named .env must sit beside this script, holding the!C_RESET!
     echo    !C_MUTED!transcription service address and key. Copy .env.example!C_RESET!
-    echo    !C_MUTED!to .env and fill it in. See README.txt.!C_RESET!
+    echo    !C_MUTED!to .env and fill it in. See README.md.!C_RESET!
     echo.
     pause
     goto :terminate

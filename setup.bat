@@ -426,7 +426,7 @@ call :draw_python_check
 if exist "%APP_DIR%.env" (
     echo      !C_OK![ OK ]!C_RESET! Settings file     !C_MUTED!holds the service address and key!C_RESET!
 ) else (
-    echo      !C_FAIL![ NO ]!C_RESET! Settings file     !C_MUTED!missing .env - see README.txt!C_RESET!
+    echo      !C_FAIL![ NO ]!C_RESET! Settings file     !C_MUTED!missing .env - see README.md!C_RESET!
 )
 
 reg query "%MENU_ROOT%\Directory\shell\Mimir" >nul 2>nul
@@ -443,7 +443,7 @@ echo.
 if not exist "%APP_DIR%.env" (
     echo    !C_WARN!Mimir cannot transcribe until the .env file is in place.!C_RESET!
     echo    !C_MUTED!Copy app\.env.example to app\.env and fill it in.!C_RESET!
-    echo    !C_MUTED!See FIRST TIME SETUP in README.txt.!C_RESET!
+    echo    !C_MUTED!See CONFIGURATION in README.md.!C_RESET!
     echo.
 )
 

@@ -20,6 +20,7 @@ entry. There is no application to install and no interface to learn.
 - [Running Mimir](#running-mimir)
 - [Where the text goes](#where-the-text-goes)
 - [The right-click menu](#the-right-click-menu)
+- [Updating](#updating)
 - [Troubleshooting](#troubleshooting)
 - [Moving Mimir to another computer](#moving-mimir-to-another-computer)
 - [For developers](#for-developers)
@@ -91,6 +92,8 @@ says so, and you run it again.
 
 Running `setup.bat` is optional. Mimir performs the same checks quietly every
 time it starts, and only speaks up when something is missing.
+
+Later on, `update.bat` fetches new releases. See [Updating](#updating).
 
 ### 3. Add the settings file
 
@@ -297,6 +300,64 @@ its own, and it asks again before changing anything. Worth knowing:
 
 ---
 
+## Updating
+
+Double-click `update.bat`.
+
+It asks GitHub what the newest release is, shows that next to the version you
+have, and stops there if they match:
+
+```
+  Installed  v0.1
+  Latest     v0.1
+
+  [ OK ] Mimir is already up to date.
+```
+
+If there is a newer one, it says so and waits:
+
+```
+  Update Mimir to v0.2?
+
+  [Y] Update   [N] Quit
+```
+
+Press `Y`. Mimir downloads the release, lays it over the folder, records the
+new version, and re-runs the setup checks. It finishes with:
+
+```
+  [ OK ] Mimir is now v0.2.
+```
+
+The window closes partway through and a second one opens. That is normal:
+`update.bat` cannot replace itself while it is running, so it hands the job to
+a copy of itself in the temp folder.
+
+### What is kept
+
+| Kept | Replaced |
+| --- | --- |
+| `app\.env` — your address and key | Every file that came with Mimir |
+| `mimir.log` | |
+| `app\tools\` — your own FFmpeg copy | |
+| The shortcut and the right-click menu | |
+
+Changes you made to Mimir's own files are overwritten, so keep your own copies
+elsewhere. Nothing in the folder is deleted: a file that a newer release no
+longer ships is simply left behind.
+
+The installed version is recorded in `app\version.txt`, and `setup.bat` prints
+it at the bottom of its report. A folder installed before `update.bat` existed
+has no such file; it reads as "not recorded", and updating writes one.
+
+`update.bat /force` installs the latest release again even when the version
+already matches, to repair a folder with missing or damaged files.
+
+Nothing is downloaded until you press `Y`, and if the download fails or does
+not look like Mimir, the folder is left untouched.
+
+---
+
 ## Troubleshooting
 
 Mimir keeps a log named `mimir.log` in the project folder. Every line is stamped
@@ -313,6 +374,8 @@ file is the record of what happened.
 | `No API settings were found` | The `.env` file exists but a line is blank or misspelled. |
 | `ffmpeg could not read this file` | The recording is damaged, or the file is not really audio. |
 | `the service returned no words for this audio` | The recording is silent, or too quiet to hear. |
+| `Could not reach GitHub to ask what the latest version is` | `update.bat` has no internet, or GitHub is unreachable. Try again, or download the release by hand from the [releases page](https://github.com/stratusadv/Mimir/releases/latest). |
+| `Some files could not be replaced` | A Mimir window was still open during an update. Close everything using the folder and run `update.bat` again. |
 | The Mimir shortcut is gone or points nowhere | Double-click `setup.bat`. It remakes the shortcut wherever the folder now lives. |
 | The right-click entry is missing or does nothing | The folder was moved or renamed. Run `setup.bat` and press `M` twice. |
 
@@ -336,9 +399,11 @@ press `M` twice: once to remove the old entry, once to add it back.
 ```
 Mimir/
 ├── setup.bat                       checks the machine, installs tools, makes the shortcut and menu
+├── update.bat                      fetches the latest release and lays it over this folder
 ├── README.md                       this file
 └── app/
     ├── .env                        your settings (git-ignored)
+    ├── version.txt                 the release this folder came from
     ├── .env.example                template for the above
     ├── transcribe.bat              launcher for audio transcription
     ├── search.bat                  launcher for document search
@@ -391,6 +456,19 @@ that needs it.
 Document search follows the same shape through `document_search.py` and
 `DocumentSearcher`, chunking the text, searching each chunk, and merging the
 findings.
+
+### Cutting a release
+
+`update.bat` compares `app\version.txt` against the tag of the newest
+published GitHub release, so both have to move together:
+
+1. Put the new tag in `app\version.txt` (`v0.2`, matching the tag exactly).
+2. Commit, tag the commit `v0.2`, and push the tag.
+3. Publish a release for that tag. No attached files are needed — the update
+   uses the source zip GitHub generates.
+
+A release whose `app\version.txt` still holds the previous tag leaves everyone
+who installs it being offered the same update again.
 
 ### Tuning
 

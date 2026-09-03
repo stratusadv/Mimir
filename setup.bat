@@ -440,6 +440,8 @@ echo.
 echo    !C_MUTED!!RULE!!C_RESET!
 echo.
 
+call :draw_version
+
 if not exist "%APP_DIR%.env" (
     echo    !C_WARN!Mimir cannot transcribe until the .env file is in place.!C_RESET!
     echo    !C_MUTED!Copy app\.env.example to app\.env and fill it in.!C_RESET!
@@ -521,6 +523,21 @@ if errorlevel 1 (
 ) else (
     echo      !C_OK![ OK ]!C_RESET! Python            !C_MUTED!a private copy, kept by uv!C_RESET!
 )
+goto :eof
+
+:draw_version
+set "installed_version="
+if exist "%APP_DIR%version.txt" (
+    for /f "usebackq tokens=* delims= " %%v in ("%APP_DIR%version.txt") do (
+        if not "%%v"=="" set "installed_version=%%v"
+    )
+)
+if defined installed_version (
+    echo    !C_MUTED!Mimir !installed_version!. Double-click update.bat to fetch the latest release.!C_RESET!
+) else (
+    echo    !C_MUTED!Double-click update.bat to fetch the latest release.!C_RESET!
+)
+echo.
 goto :eof
 
 :draw_header

@@ -218,6 +218,13 @@ if errorlevel 8 (
 
 > "!install_dir!\app\version.txt" echo !new_version!
 
+:: Stamps the update check with what was just installed, so the banner
+:: transcribe.bat and search.bat draw goes away straight away.
+if defined LOCALAPPDATA (
+    if not exist "%LOCALAPPDATA%\Mimir" mkdir "%LOCALAPPDATA%\Mimir" >nul 2>nul
+    > "%LOCALAPPDATA%\Mimir\update_check.txt" echo !new_version!
+)
+
 echo    !C_OK![ OK ]!C_RESET! Files updated.
 echo.
 echo    !C_ACCENT!Checking the computer still has what Mimir needs ...!C_RESET!

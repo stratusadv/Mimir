@@ -303,6 +303,32 @@ its own, and it asks again before changing anything. Worth knowing:
 
 ## Updating
 
+### The banner
+
+`transcribe.bat` and `search.bat` check for a newer release before they draw
+their first screen. When there is one, every screen carries a banner:
+
+```
+  Update available: v0.4 (this folder is v0.3)
+  Double-click update.bat in the Mimir folder to get it.
+```
+
+Nothing is downloaded and nothing is blocked; the run carries on as normal.
+`setup.bat` shows the same line at the bottom of its report.
+
+GitHub is asked for the newest tag at most once a day, and the answer is kept
+in `%LOCALAPPDATA%\Mimir\update_check.txt`, so a run is never held up by the
+network. A check that fails or times out leaves that file empty: no banner
+appears, and it is not tried again until the next day. `update.bat` writes the
+tag it installed into the same file, so the banner goes as soon as an update
+finishes.
+
+The banner only appears when the published release is *newer* than
+`app\version.txt`. A folder holding a build ahead of the newest release is
+left alone.
+
+### Running the update
+
 Double-click `update.bat`.
 
 It asks GitHub what the newest release is, shows that next to the version you
@@ -474,6 +500,7 @@ Mimir/
     ├── .env.example                template for the above
     ├── transcribe.bat              launcher for audio transcription
     ├── search.bat                  launcher for document search
+    ├── version_check.bat           daily check for a newer release, for the banner
     ├── audio_transcription.py      entry point: audio -> transcript / notes
     ├── document_search.py          entry point: document -> answer
     ├── transcription_manager.py    per-run orchestration and output naming
@@ -536,6 +563,9 @@ published GitHub release, so both have to move together:
 
 A release whose `app\version.txt` still holds the previous tag leaves everyone
 who installs it being offered the same update again.
+
+While `app\version.txt` is ahead of the newest published release, as it is
+between cutting a version and publishing it, no banner is shown.
 
 ### Tuning
 

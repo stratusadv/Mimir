@@ -453,6 +453,7 @@ goto :eof
 for /d %%d in ("%TEMP%\mimir-update-*") do rd /s /q "%%d" >nul 2>nul
 del /f /q "%TEMP%\mimir_queue_*.txt" >nul 2>nul
 del /f /q "%TEMP%\mimir_result_*.txt" >nul 2>nul
+if defined LOCALAPPDATA rd /s /q "%LOCALAPPDATA%\Mimir" >nul 2>nul
 goto :eof
 
 :delete_folders

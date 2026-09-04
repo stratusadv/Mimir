@@ -47,6 +47,11 @@ if not exist "%SETUP_FILE%" (
 call "%SETUP_FILE%" /quiet
 if errorlevel 1 goto :terminate
 
+set "update_available=0"
+set "installed_version="
+set "latest_version="
+if exist "%SCRIPT_DIR%version_check.bat" call "%SCRIPT_DIR%version_check.bat"
+
 if not exist "%SCRIPT_DIR%.env" (
     cls
     echo.
@@ -247,7 +252,15 @@ echo.
 echo    !C_ACCENT!!RULE!!C_RESET!
 echo     !C_WHITE!MIMIR!C_RESET!  !C_MUTED!search a document!C_RESET!
 echo    !C_ACCENT!!RULE!!C_RESET!
+call :draw_update_banner
 call :draw_ai_warning
+goto :eof
+
+:draw_update_banner
+if not "%update_available%"=="1" goto :eof
+echo    !C_WARN!Update available: !latest_version!!C_RESET! !C_MUTED!(this folder is !installed_version!)!C_RESET!
+echo    !C_MUTED!Double-click update.bat in the Mimir folder to get it.!C_RESET!
+echo.
 goto :eof
 
 :terminate

@@ -133,7 +133,7 @@ LLM_TEXT_MODEL=stratus.thinking
 
 | Setting | Required | Used for |
 | --- | --- | --- |
-| `AI_API_HOST` | Yes | Base URL of the OpenAI-compatible service. No trailing slash. |
+| `AI_API_HOST` | Yes | Base URL of the OpenAI-compatible service. A trailing slash or `/v1` suffix is trimmed. |
 | `AI_API_KEY` | Yes | Credential for that service. |
 | `LLM_AUDIO_MODEL` | No | Transcription model. Defaults to `stratus.listen`. |
 | `LLM_TEXT_MODEL` | No | Notes, summaries, and document search. Defaults to `stratus.thinking`. |

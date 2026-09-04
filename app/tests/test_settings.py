@@ -22,12 +22,20 @@ def test_base_url_appends_version_segment(settings_factory: Callable[..., Transc
     assert settings.base_url == 'https://service.test/v1'
 
 
-def test_base_url_doubles_slash_when_host_has_trailing_slash(
+def test_base_url_strips_a_trailing_slash_from_the_host(
         settings_factory: Callable[..., TranscriptionSettings],
 ) -> None:
     settings = settings_factory(api_host='https://service.test/')
 
-    assert settings.base_url == 'https://service.test//v1'
+    assert settings.base_url == 'https://service.test/v1'
+
+
+def test_base_url_keeps_a_host_that_already_ends_with_the_version_segment(
+        settings_factory: Callable[..., TranscriptionSettings],
+) -> None:
+    settings = settings_factory(api_host='https://service.test:443/v1')
+
+    assert settings.base_url == 'https://service.test:443/v1'
 
 
 def test_configuration_detail_names_both_missing_keys(

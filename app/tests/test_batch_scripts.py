@@ -14,6 +14,7 @@ from constants import SUPPORTED_AUDIO_EXTENSIONS, SUPPORTED_DOCUMENT_EXTENSIONS
 
 
 APP_SCRIPT_NAMES = ('search.bat', 'transcribe.bat')
+APP_HELPER_SCRIPT_NAMES = ('version_check.bat',)
 CALL_PATTERN = re.compile(r'^\s*call\s+:([A-Za-z0-9_]+)', re.IGNORECASE | re.MULTILINE)
 CONFIGURED_ENVIRONMENT = 'AI_API_HOST=https://service.test\nAI_API_KEY=test-key\n'
 DYNAMIC_SET_PATTERN = re.compile(r'(?:^|\s)set\s+(?:/a\s+)?"?([A-Za-z0-9_]+)!', re.IGNORECASE | re.MULTILINE)
@@ -47,7 +48,8 @@ pytestmark = pytest.mark.windows
 
 
 def batch_files(repository_directory: Path) -> list[Path]:
-    app_files = [repository_directory / 'app' / name for name in APP_SCRIPT_NAMES]
+    names = APP_SCRIPT_NAMES + APP_HELPER_SCRIPT_NAMES
+    app_files = [repository_directory / 'app' / name for name in names]
     root_files = [repository_directory / name for name in ROOT_SCRIPT_NAMES]
 
     return root_files + app_files
@@ -141,10 +143,33 @@ def test_every_jump_target_exists(repository_directory: Path) -> None:
 
 
 def test_every_script_enables_delayed_expansion(repository_directory: Path) -> None:
+    helper_files = {repository_directory / 'app' / name for name in APP_HELPER_SCRIPT_NAMES}
+
     for script_file in batch_files(repository_directory):
+        if script_file in helper_files:
+            continue
+
         text = script_file.read_text(encoding='utf-8', errors='replace')
 
         assert 'setlocal enabledelayedexpansion' in text.lower()
+
+
+def test_version_check_sets_what_the_scripts_draw(repository_directory: Path) -> None:
+    text = (repository_directory / 'app' / 'version_check.bat').read_text(encoding='utf-8', errors='replace')
+    assigned = {name.upper() for name in SET_PATTERN.findall(text)}
+    assigned.update(name.upper() for name in OUT_PARAMETER_PATTERN.findall(text))
+
+    assert 'setlocal' not in text.lower()
+    assert {'UPDATE_AVAILABLE', 'INSTALLED_VERSION', 'LATEST_VERSION'} <= assigned
+
+
+def test_the_scripts_draw_the_update_banner_from_the_check(repository_directory: Path) -> None:
+    for name in APP_SCRIPT_NAMES:
+        text = (repository_directory / 'app' / name).read_text(encoding='utf-8', errors='replace')
+
+        assert 'if exist "%SCRIPT_DIR%version_check.bat" call "%SCRIPT_DIR%version_check.bat"' in text
+        assert 'call :draw_update_banner' in text
+        assert 'update.bat' in text
 
 
 def test_search_accepts_the_document_extensions_python_supports(repository_directory: Path) -> None:

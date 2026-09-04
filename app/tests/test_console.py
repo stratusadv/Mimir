@@ -21,6 +21,19 @@ def answers_queued(monkeypatch: pytest.MonkeyPatch, answers: list[str]) -> list[
         return remaining.pop(0)
 
     monkeypatch.setattr(builtins, 'input', read)
+    monkeypatch.setattr(Console, 'reads_single_keys', staticmethod(lambda: False))
+
+    return remaining
+
+
+def keys_queued(monkeypatch: pytest.MonkeyPatch, characters: list[str]) -> list[str]:
+    remaining = list(characters)
+
+    def press() -> str:
+        return remaining.pop(0)
+
+    monkeypatch.setattr(Console, 'reads_single_keys', staticmethod(lambda: True))
+    monkeypatch.setattr(Console, 'key_pressed', staticmethod(press))
 
     return remaining
 
@@ -113,6 +126,39 @@ def test_search_save_ask_returns_false_on_end_of_input(monkeypatch: pytest.Monke
     _ = answers_queued(monkeypatch, [])
 
     assert Console().search_save_ask() is False
+
+
+def test_search_save_ask_takes_a_single_key_without_enter(monkeypatch: pytest.MonkeyPatch) -> None:
+    remaining = keys_queued(monkeypatch, ['y', 'n'])
+
+    assert Console().search_save_ask() is True
+    assert remaining == ['n']
+
+
+def test_search_save_ask_ignores_a_key_that_is_not_offered(monkeypatch: pytest.MonkeyPatch) -> None:
+    remaining = keys_queued(monkeypatch, ['m', 'n'])
+
+    assert Console().search_save_ask() is False
+    assert remaining == []
+
+
+def test_search_save_ask_gives_up_after_ten_unoffered_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    remaining = keys_queued(monkeypatch, ['m'] * 12)
+
+    assert Console().search_save_ask() is False
+    assert len(remaining) == 2
+
+
+def test_search_save_ask_echoes_the_key_that_was_pressed(
+        ansi_stripped: Callable[[str], str],
+        capsys: pytest.CaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = keys_queued(monkeypatch, ['y'])
+    _ = Console().search_save_ask()
+    text = ansi_stripped(capsys.readouterr().out)
+
+    assert '[Y] Write .txt   [N] Skip: Y' in text
 
 
 def test_search_start_truncates_a_long_query(

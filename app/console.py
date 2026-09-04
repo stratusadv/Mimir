@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import ctypes
 import os
+import sys
 
 from pathlib import Path
 
-from constants import LOG_PATH
+from constants import KEY_ATTEMPTS_MAX, LOG_PATH
+
+
+if os.name == 'nt':
+    import msvcrt
 
 
 class Console:
@@ -47,6 +52,55 @@ class Console:
     def interrupted(self) -> None:
         print(f'{self.CLEAR_LINE}   {self.WARN}[STOP]{self.RESET} interrupted')
 
+    def key_ask(self, prompt: str, keys: tuple[str, ...]) -> str:
+        reads_single_keys = self.reads_single_keys()
+
+        for _ in range(KEY_ATTEMPTS_MAX):
+            print(f'   {prompt}', end='', flush=True)
+            key = self.key_pressed() if reads_single_keys else self.key_typed()
+
+            if key is None:
+                print()
+
+                return ''
+
+            if reads_single_keys:
+                print(key.upper() if key in keys else '')
+
+            if key in keys:
+                return key
+
+        print()
+
+        return ''
+
+    @staticmethod
+    def key_pressed() -> str | None:
+        character = msvcrt.getwch()
+
+        if character in ('\x00', '\xe0'):
+            _ = msvcrt.getwch()
+
+            return ''
+
+        if character == '\x03':
+            raise KeyboardInterrupt
+
+        if character == '\x04':
+            return None
+
+        return character.lower()
+
+    @staticmethod
+    def key_typed() -> str | None:
+        try:
+            answer = input()
+
+        except EOFError:
+            return None
+
+        return answer.strip().lower()[:1]
+
     def notes(self, notes_file: Path) -> None:
         print(f'         {self.MUTED}notes{self.RESET} {self.OK}{notes_file.name}{self.RESET}')
 
@@ -71,6 +125,10 @@ class Console:
             end='',
             flush=True,
         )
+
+    @staticmethod
+    def reads_single_keys() -> bool:
+        return os.name == 'nt' and bool(sys.stdin) and sys.stdin.isatty()
 
     def search_failure(self, error: Exception) -> None:
         print(f'         {self.WARN}Search highlights could not be added; the notes are unchanged.{self.RESET}')
@@ -98,23 +156,7 @@ class Console:
         print(f'   {self.MUTED}[N] skips writing. The findings stay in this window only.{self.RESET}')
         print()
 
-        save_attempts_max = 10
-
-        for _ in range(save_attempts_max):
-            try:
-                answer = input('   [Y] Write .txt   [N] Skip: ').strip().lower()
-
-            except EOFError:
-                return False
-
-            else:
-                if answer in ('y', 'yes'):
-                    return True
-
-                if answer in ('n', 'no'):
-                    return False
-
-        return False
+        return self.key_ask('[Y] Write .txt   [N] Skip: ', ('y', 'n')) == 'y'
 
     def search_saved(self, output_file: Path) -> None:
         print(f'         {self.MUTED}wrote{self.RESET} {self.OK}{output_file.name}{self.RESET}')

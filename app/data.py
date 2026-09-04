@@ -69,7 +69,12 @@ class TranscriptionSettings:
 
     @property
     def base_url(self) -> str:
-        return f'{self.api_host}/v1'
+        host = (self.api_host or '').strip().rstrip('/')
+
+        if host.endswith('/v1'):
+            return host
+
+        return f'{host}/v1'
 
     @property
     def configuration_detail(self) -> str:

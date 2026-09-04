@@ -526,11 +526,20 @@ if errorlevel 1 (
 goto :eof
 
 :draw_version
+set "update_available=0"
 set "installed_version="
-if exist "%APP_DIR%version.txt" (
+set "latest_version="
+if exist "%APP_DIR%version_check.bat" call "%APP_DIR%version_check.bat"
+if not defined installed_version if exist "%APP_DIR%version.txt" (
     for /f "usebackq tokens=* delims= " %%v in ("%APP_DIR%version.txt") do (
         if not "%%v"=="" set "installed_version=%%v"
     )
+)
+if "!update_available!"=="1" (
+    echo    !C_WARN!Update available: !latest_version!!C_RESET! !C_MUTED!(this folder is !installed_version!)!C_RESET!
+    echo    !C_MUTED!Double-click update.bat to get it.!C_RESET!
+    echo.
+    goto :eof
 )
 if defined installed_version (
     echo    !C_MUTED!Mimir !installed_version!. Double-click update.bat to fetch the latest release.!C_RESET!

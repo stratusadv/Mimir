@@ -21,6 +21,7 @@ entry. There is no application to install and no interface to learn.
 - [Where the text goes](#where-the-text-goes)
 - [The right-click menu](#the-right-click-menu)
 - [Updating](#updating)
+- [Uninstalling](#uninstalling)
 - [Troubleshooting](#troubleshooting)
 - [Moving Mimir to another computer](#moving-mimir-to-another-computer)
 - [For developers](#for-developers)
@@ -358,6 +359,71 @@ not look like Mimir, the folder is left untouched.
 
 ---
 
+## Uninstalling
+
+Double-click `uninstall.bat`.
+
+It searches the computer first and shows what it found before it touches
+anything:
+
+```
+  What was found:
+
+    Mimir folders     2
+      C:\Users\you\Desktop\audio_transciber
+      C:\Users\you\Downloads\Mimir
+
+    Registry entries  15   right-click menu and settings
+    Shortcuts         1
+
+  [Y] Remove all   [K] Keep folders   [D] Search more   [Q] Quit
+```
+
+`Y` deletes the folders and clears everything Mimir put in Windows. `K` clears
+the Windows side but leaves the folders alone. `D` searches every fixed drive,
+which is slower but finds a copy kept somewhere unusual. `Q` changes nothing.
+
+The window closes partway through and a second one opens, for the same reason
+`update.bat` does it: the script cannot delete the folder it is running from,
+so it hands the job to a copy of itself in the temp folder.
+
+### Why more than one copy matters
+
+Every copy of Mimir writes the same right-click entries and the same shortcut
+target, so the last one to run setup wins. A folder someone unzipped months ago
+still answers to the same names, and after the newer copy is moved or renamed
+the menu can end up pointing at the older one. `uninstall.bat` searches for all
+of them rather than only the folder it sits in, which is what makes a clean
+reinstall clean.
+
+### What is removed
+
+| Removed | Left alone |
+| --- | --- |
+| Every Mimir folder found, with `Y` | Transcripts and notes — they sit beside your audio files |
+| `Transcribe with Mimir` and `Search with Mimir` menu entries, including any left by an older version | FFmpeg and uv, unless you ask for them |
+| The `Mimir` shortcut, wherever it is | Everything else on the computer |
+| `HKCU\Software\Mimir`, where the shortcut target and the menu answer are kept | |
+| Leftover Mimir files in the temp folder | |
+
+Before a folder is deleted, its `app\.env` is copied to
+`%USERPROFILE%\Mimir-settings-backup`, so the address and key survive for a
+future install.
+
+Two extra questions come up only when they apply. If Mimir switched off the
+Windows 11 short right-click menu, it offers to put that back. If FFmpeg and uv
+are installed, it offers to remove them too — the safe answer is to leave them,
+since they are ordinary tools and other programs may be using them. Removing uv
+also clears the private Python and the download cache it keeps.
+
+Menu entries written for every user on the machine, rather than just yours, need
+administrator rights to clear. The report says so when that happens: right-click
+`uninstall.bat`, choose "Run as administrator", and run it again.
+
+`uninstall.bat /deep` starts with the every-drive search instead of offering it.
+
+---
+
 ## Troubleshooting
 
 Mimir keeps a log named `mimir.log` in the project folder. Every line is stamped
@@ -400,6 +466,7 @@ press `M` twice: once to remove the old entry, once to add it back.
 Mimir/
 ├── setup.bat                       checks the machine, installs tools, makes the shortcut and menu
 ├── update.bat                      fetches the latest release and lays it over this folder
+├── uninstall.bat                   finds every copy of Mimir and takes it off the computer
 ├── README.md                       this file
 └── app/
     ├── .env                        your settings (git-ignored)

@@ -7,6 +7,14 @@ CHUNK_ATTEMPTS_MAX = 4
 CHUNK_RETRY_BACKOFF_SECONDS = 1.5
 CHUNK_RETRY_JITTER_SECONDS = 0.5
 CHUNK_WORKERS_MAX = 10
+ENVIRONMENT_BOMS = (
+    (b'\xff\xfe\x00\x00', 'utf-32-le'),
+    (b'\x00\x00\xfe\xff', 'utf-32-be'),
+    (b'\xff\xfe', 'utf-16-le'),
+    (b'\xfe\xff', 'utf-16-be'),
+    (b'\xef\xbb\xbf', 'utf-8-sig'),
+)
+ENVIRONMENT_FILE_NAME = '.env'
 OUTPUT_ATTEMPTS_MAX = 999
 OUTPUT_MODE_BOTH = 'both'
 OUTPUT_MODE_NOTES = 'notes'

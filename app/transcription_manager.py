@@ -9,7 +9,7 @@ from time import perf_counter
 from audio_chunker import AudioChunker
 from audio_file_transcriber import AudioFileTranscriber
 from console import Console
-from constants import OUTPUT_MODES, SCRIPT_DIRECTORY, SUPPORTED_AUDIO_EXTENSIONS
+from constants import OUTPUT_MODES, SUPPORTED_AUDIO_EXTENSIONS
 from data import TranscriptionSettings
 from transcript_polisher import TranscriptPolisher
 from transcription_client import TranscriptionClient
@@ -114,7 +114,7 @@ class TranscriptionManager:
 
     def run(self) -> int:
         if not self.settings.is_configured:
-            detail = f'Expected a .env file beside the script: {SCRIPT_DIRECTORY}'
+            detail = self.settings.configuration_detail
             self.console.error('No API settings were found.', detail)
             log.error('no API settings were found. %s', detail)
 

@@ -20,7 +20,7 @@ from types import TracebackType
 from docx import Document
 
 from console import Console
-from constants import LOG_PATH, SCRIPT_DIRECTORY, SUPPORTED_DOCUMENT_EXTENSIONS
+from constants import LOG_PATH, SUPPORTED_DOCUMENT_EXTENSIONS
 from data import TranscriptionSettings
 from document_searcher import DocumentSearcher
 from errors import SearchError
@@ -120,7 +120,7 @@ class DocumentSearchManager:
 
     def run(self) -> int:
         if not self.settings.is_configured:
-            detail = f'Expected a .env file beside the script: {SCRIPT_DIRECTORY}'
+            detail = self.settings.configuration_detail
             self.console.error('No API settings were found.', detail)
             log.error('no API settings were found. %s', detail)
 

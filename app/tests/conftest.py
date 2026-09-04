@@ -97,13 +97,14 @@ def settings(settings_factory: Callable[..., TranscriptionSettings]) -> Transcri
 
 
 @pytest.fixture
-def settings_factory() -> Callable[..., TranscriptionSettings]:
+def settings_factory(tmp_path: Path) -> Callable[..., TranscriptionSettings]:
     def build(**overrides) -> TranscriptionSettings:
         values = {
             'api_host': 'https://service.test',
             'api_key': 'test-key',
             'audio_model': 'stratus.listen',
             'chunk_workers_max': 2,
+            'environment_file': tmp_path / '.env',
             'output_mode': 'transcript',
             'result_file': None,
             'search_query': '',

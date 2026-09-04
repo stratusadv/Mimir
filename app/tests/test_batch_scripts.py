@@ -16,10 +16,31 @@ from constants import SUPPORTED_AUDIO_EXTENSIONS, SUPPORTED_DOCUMENT_EXTENSIONS
 APP_SCRIPT_NAMES = ('search.bat', 'transcribe.bat')
 CALL_PATTERN = re.compile(r'^\s*call\s+:([A-Za-z0-9_]+)', re.IGNORECASE | re.MULTILINE)
 CONFIGURED_ENVIRONMENT = 'AI_API_HOST=https://service.test\nAI_API_KEY=test-key\n'
+DYNAMIC_SET_PATTERN = re.compile(r'(?:^|\s)set\s+(?:/a\s+)?"?([A-Za-z0-9_]+)!', re.IGNORECASE | re.MULTILINE)
 GOTO_PATTERN = re.compile(r'\bgoto\s+:?([A-Za-z0-9_]+)', re.IGNORECASE)
+INHERITED_VARIABLES = frozenset({
+    'APPDATA',
+    'COMSPEC',
+    'ERRORLEVEL',
+    'LOCALAPPDATA',
+    'PATH',
+    'PROGRAMDATA',
+    'PROGRAMFILES',
+    'RANDOM',
+    'SYSTEMROOT',
+    'TEMP',
+    'TMP',
+    'USERNAME',
+    'USERPROFILE',
+    'WINDIR',
+})
 LABEL_PATTERN = re.compile(r'^\s*:([A-Za-z0-9_]+)', re.MULTILINE)
+OUT_PARAMETER_PATTERN = re.compile(
+    r'^\s*call\s+:[A-Za-z0-9_]+\s+[^\r\n]*?\s([A-Za-z_][A-Za-z0-9_]*)[ \t]*$',
+    re.IGNORECASE | re.MULTILINE,
+)
 ROOT_SCRIPT_NAMES = ('setup.bat', 'test.bat', 'uninstall.bat', 'update.bat')
-SET_PATTERN = re.compile(r'^\s*set\s+(?:/a\s+|/p\s+)?"?([A-Za-z0-9_]+)\s*[=+]', re.IGNORECASE | re.MULTILINE)
+SET_PATTERN = re.compile(r'(?:^|\s)set\s+(?:/a\s+|/p\s+)?"?([A-Za-z0-9_]+)\s*[=+]', re.IGNORECASE | re.MULTILINE)
 VARIABLE_PATTERN = re.compile(r'!([A-Za-z0-9_]+)!')
 
 pytestmark = pytest.mark.windows
@@ -80,7 +101,7 @@ def test_app_scripts_check_for_the_env_file_beside_themselves(repository_directo
 def test_env_example_holds_every_key_the_settings_read(repository_directory: Path) -> None:
     example_text = (repository_directory / 'app' / '.env.example').read_text(encoding='utf-8')
     data_text = (repository_directory / 'app' / 'data.py').read_text(encoding='utf-8')
-    read_names = set(re.findall(r"os\.getenv\('(AI_[A-Z_]+|LLM_[A-Z_]+)'", data_text))
+    read_names = set(re.findall(r"'(AI_[A-Z0-9_]+|LLM_[A-Z0-9_]+)'", data_text))
     example_names = set(re.findall(r'^([A-Z_]+)=', example_text, re.MULTILINE))
 
     assert read_names
@@ -99,8 +120,11 @@ def test_every_delayed_variable_is_assigned_in_the_same_file(repository_director
     for script_file in batch_files(repository_directory):
         text = script_file.read_text(encoding='utf-8', errors='replace')
         assigned = {name.upper() for name in SET_PATTERN.findall(text)}
+        assigned.update(name.upper() for name in OUT_PARAMETER_PATTERN.findall(text))
+        prefixes = tuple(prefix.upper() for prefix in DYNAMIC_SET_PATTERN.findall(text))
         referenced = {name.upper() for name in VARIABLE_PATTERN.findall(text)}
-        unknown = {name for name in referenced - assigned if not name.startswith('ERRORLEVEL')}
+        remaining = referenced - assigned - INHERITED_VARIABLES
+        unknown = {name for name in remaining if not name.startswith(prefixes)}
 
         assert not unknown, f'{script_file.name} reads unset variables: {sorted(unknown)}'
 

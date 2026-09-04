@@ -6,7 +6,6 @@ import pytest
 
 import transcript_polisher
 import transcription_client
-import transcription_manager
 
 from pathlib import Path
 from typing_extensions import Callable
@@ -216,6 +215,24 @@ def test_run_rejects_an_unknown_output_mode(
     assert console.events_named('error')[0][1] == 'Unknown output mode: summary'
 
 
+def test_run_names_the_missing_key_when_the_env_file_exists(
+        monkeypatch: pytest.MonkeyPatch,
+        settings_factory: Callable[..., TranscriptionSettings],
+        tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(sys, 'argv', ['audio_transcription.py'])
+    environment_file = tmp_path / '.env'
+    environment_file.write_text('AI_API_KEY=test-key\n', encoding='utf-8')
+
+    console = SilentConsole()
+    settings = settings_factory(api_host=None, environment_file=environment_file)
+    manager = TranscriptionManager(settings, console)
+
+    assert manager.run() == 1
+    assert 'AI_API_HOST is empty or missing' in console.events_named('error')[0][2]
+    assert str(environment_file) in console.events_named('error')[0][2]
+
+
 def test_run_reports_missing_settings(
         monkeypatch: pytest.MonkeyPatch,
         settings_factory: Callable[..., TranscriptionSettings],
@@ -226,7 +243,7 @@ def test_run_reports_missing_settings(
 
     assert manager.run() == 1
     assert console.events_named('error')[0][1] == 'No API settings were found.'
-    assert str(transcription_manager.SCRIPT_DIRECTORY) in console.events_named('error')[0][2]
+    assert 'No settings file was found' in console.events_named('error')[0][2]
 
 
 def test_run_warns_when_there_is_nothing_to_transcribe(

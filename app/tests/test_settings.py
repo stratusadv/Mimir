@@ -30,6 +30,58 @@ def test_base_url_doubles_slash_when_host_has_trailing_slash(
     assert settings.base_url == 'https://service.test//v1'
 
 
+def test_configuration_detail_names_both_missing_keys(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    _ = environment_file_written('LLM_TEXT_MODEL=stratus.thinking\n')
+    settings = TranscriptionSettings.from_environment()
+
+    assert settings.missing_names == ['AI_API_HOST', 'AI_API_KEY']
+    assert 'AI_API_HOST and AI_API_KEY are empty or missing' in settings.configuration_detail
+    assert str(settings.environment_file) in settings.configuration_detail
+
+
+def test_configuration_detail_names_one_missing_key(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    _ = environment_file_written('AI_API_HOST=https://service.test\nAI_API_KEY=\n')
+    settings = TranscriptionSettings.from_environment()
+
+    assert settings.missing_names == ['AI_API_KEY']
+    assert 'AI_API_KEY is empty or missing' in settings.configuration_detail
+    assert 'AI_API_HOST' not in settings.configuration_detail
+
+
+def test_configuration_detail_points_at_a_missing_file(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    settings = TranscriptionSettings.from_environment()
+
+    assert 'No settings file was found' in settings.configuration_detail
+    assert 'Copy .env.example to .env' in settings.configuration_detail
+    assert str(settings.environment_file.parent) in settings.configuration_detail
+
+
+def test_configuration_detail_reports_a_line_without_an_equals_sign(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    _ = environment_file_written('# a comment\nAI_API_HOST https://service.test\nAI_API_KEY=test-key\n')
+    settings = TranscriptionSettings.from_environment()
+
+    assert settings.has_unparsable_lines
+    assert 'some lines have no = sign' in settings.configuration_detail
+
+
+def test_configuration_detail_stays_quiet_about_comments_and_blank_lines(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    _ = environment_file_written('# a comment\n\n   \nAI_API_KEY=test-key\n')
+    settings = TranscriptionSettings.from_environment()
+
+    assert not settings.has_unparsable_lines
+    assert 'no = sign' not in settings.configuration_detail
+
+
 def test_from_environment_accepts_bom_prefixed_file(environment_file_written: Callable[..., Path]) -> None:
     _ = environment_file_written(b'\xef\xbb\xbf' + CONFIGURED_ENVIRONMENT.encode('utf-8'))
     settings = TranscriptionSettings.from_environment()
@@ -170,7 +222,7 @@ def test_from_environment_reads_result_file_and_query(
     assert settings.search_query == 'action items'
 
 
-def test_from_environment_stale_process_variable_shadows_the_env_file(
+def test_from_environment_prefers_the_env_file_over_a_stale_process_variable(
         environment_file_written: Callable[..., Path],
         monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -179,7 +231,30 @@ def test_from_environment_stale_process_variable_shadows_the_env_file(
 
     settings = TranscriptionSettings.from_environment()
 
-    assert settings.api_key == 'stale-key'
+    assert settings.api_key == 'test-key'
+
+
+def test_from_environment_falls_back_to_a_process_variable(
+        environment_file_written: Callable[..., Path],
+        monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = environment_file_written('AI_API_HOST=https://service.test\n')
+    monkeypatch.setenv('AI_API_KEY', 'process-key')
+
+    settings = TranscriptionSettings.from_environment()
+
+    assert settings.is_configured
+    assert settings.api_key == 'process-key'
+
+
+def test_from_environment_leaves_the_process_environment_alone(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    _ = environment_file_written(CONFIGURED_ENVIRONMENT)
+    settings = TranscriptionSettings.from_environment()
+
+    assert settings.is_configured
+    assert os.getenv('AI_API_KEY') is None
 
 
 def test_from_environment_unparsable_line_is_skipped_silently(
@@ -193,11 +268,21 @@ def test_from_environment_unparsable_line_is_skipped_silently(
     assert not settings.is_configured
 
 
-def test_from_environment_utf16_file_raises(environment_file_written: Callable[..., Path]) -> None:
+def test_from_environment_reads_a_utf16_file(environment_file_written: Callable[..., Path]) -> None:
     _ = environment_file_written(CONFIGURED_ENVIRONMENT.encode('utf-16'))
+    settings = TranscriptionSettings.from_environment()
 
-    with pytest.raises(UnicodeDecodeError):
-        _ = TranscriptionSettings.from_environment()
+    assert settings.is_configured
+    assert settings.api_host == 'https://service.test'
+
+
+def test_from_environment_reads_a_utf16_big_endian_file(
+        environment_file_written: Callable[..., Path],
+) -> None:
+    _ = environment_file_written(b'\xfe\xff' + CONFIGURED_ENVIRONMENT.encode('utf-16-be'))
+    settings = TranscriptionSettings.from_environment()
+
+    assert settings.is_configured
 
 
 def test_is_configured_requires_both_host_and_key(

@@ -15,6 +15,7 @@ ENVIRONMENT_BOMS = (
     (b'\xef\xbb\xbf', 'utf-8-sig'),
 )
 ENVIRONMENT_FILE_NAME = '.env'
+KEY_ATTEMPTS_MAX = 10
 OUTPUT_ATTEMPTS_MAX = 999
 OUTPUT_MODE_BOTH = 'both'
 OUTPUT_MODE_NOTES = 'notes'

@@ -536,7 +536,7 @@ if not defined installed_version if exist "%APP_DIR%version.txt" (
     )
 )
 if "!update_available!"=="1" (
-    echo    !C_WARN!Update available: !latest_version!!C_RESET! !C_MUTED!(this folder is !installed_version!)!C_RESET!
+    echo    !C_WARN!Update available: !latest_version!!C_RESET! !C_MUTED!^(this folder is !installed_version!^)!C_RESET!
     echo    !C_MUTED!Double-click update.bat to get it.!C_RESET!
     echo.
     goto :eof
